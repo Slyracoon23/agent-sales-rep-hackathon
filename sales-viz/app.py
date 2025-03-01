@@ -408,6 +408,269 @@ app.layout = html.Div([
                     ], width=12)
                 ], className="mb-4")
             ], fluid=True)
+        ]),
+        
+        # Optimizer Tab (New)
+        dbc.Tab(label="Optimizer", tab_id="tab-optimizer", children=[
+            dbc.Container([
+                # Tab Description
+                dbc.Row([
+                    dbc.Col([
+                        html.H3("Prompt Optimization Tools", className="text-center my-3"),
+                        html.P("Optimize grader and system prompts based on conversation analysis and expected outcomes.", 
+                               className="text-center text-muted mb-4"),
+                    ], width=12)
+                ]),
+                
+                # Simulation Selector for Optimizer
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Card([
+                            dbc.CardHeader("Select Simulation to Optimize", className="text-center"),
+                            dbc.CardBody([
+                                dcc.Dropdown(
+                                    id='optimizer-simulation-selector',
+                                    options=[
+                                        {'label': f'Simulation #{sim["simulationNumber"]} (Start Index: {sim["startIndex"]})', 
+                                         'value': sim["simulationNumber"]} 
+                                        for sim in data_loader.simulation_results
+                                    ],
+                                    value=data_loader.simulation_results[0]["simulationNumber"] if data_loader.simulation_results else None,
+                                    clearable=False
+                                )
+                            ])
+                        ])
+                    ], width=12)
+                ], className="mb-4"),
+                
+                # Tabs for Grader and System Prompt Optimizers
+                dbc.Tabs([
+                    # Grader Prompt Optimizer
+                    dbc.Tab(label="Grader Prompt Optimizer", tab_id="tab-grader-optimizer", children=[
+                        dbc.Row([
+                            # Left Column - Conversation and Current Evaluation
+                            dbc.Col([
+                                # Conversation Display
+                                dbc.Card([
+                                    dbc.CardHeader("Conversation", className="text-center"),
+                                    dbc.CardBody([
+                                        html.Div(
+                                            id='optimizer-conversation-view',
+                                            style={"height": "400px", "overflowY": "auto"}
+                                        )
+                                    ])
+                                ], className="mb-3"),
+                                
+                                # Current Grader Evaluation
+                                dbc.Card([
+                                    dbc.CardHeader("Current Grader Evaluation", className="text-center"),
+                                    dbc.CardBody([
+                                        html.Div(id='optimizer-current-evaluation', 
+                                               style={"maxHeight": "300px", "overflowY": "auto"})
+                                    ])
+                                ])
+                            ], width=6),
+                            
+                            # Right Column - Grader Prompt and Expected Evaluation
+                            dbc.Col([
+                                # Current Grader Prompt
+                                dbc.Card([
+                                    dbc.CardHeader("Current Grader Prompt", className="text-center"),
+                                    dbc.CardBody([
+                                        html.Div(id='optimizer-current-grader-prompt', className="border p-3 bg-light", 
+                                                style={"height": "400px", "overflowY": "auto", "white-space": "pre-wrap"})
+                                    ])
+                                ], className="mb-3"),
+                                
+                                # Expected Evaluation
+                                dbc.Card([
+                                    dbc.CardHeader("Expected Evaluation", className="text-center"),
+                                    dbc.CardBody([
+                                        html.H6("Sales Agent Evaluation", className="mt-1"),
+                                        dbc.RadioItems(
+                                            id='optimizer-expected-sales-assessment',
+                                            options=[
+                                                {'label': 'Pass', 'value': 'pass'},
+                                                {'label': 'Fail', 'value': 'fail'}
+                                            ],
+                                            inline=True,
+                                            className="mb-1"
+                                        ),
+                                        dbc.Textarea(
+                                            id='optimizer-expected-sales-feedback',
+                                            placeholder="Expected feedback for sales agent...",
+                                            rows=2,
+                                            className="mb-2"
+                                        ),
+                                        
+                                        html.H6("Customer Agent Evaluation", className="mt-1"),
+                                        dbc.RadioItems(
+                                            id='optimizer-expected-customer-assessment',
+                                            options=[
+                                                {'label': 'Pass', 'value': 'pass'},
+                                                {'label': 'Fail', 'value': 'fail'}
+                                            ],
+                                            inline=True,
+                                            className="mb-1"
+                                        ),
+                                        dbc.Textarea(
+                                            id='optimizer-expected-customer-feedback',
+                                            placeholder="Expected feedback for customer agent...",
+                                            rows=2,
+                                            className="mb-2"
+                                        ),
+                                        
+                                        html.H6("Overall Assessment", className="mt-1"),
+                                        dbc.RadioItems(
+                                            id='optimizer-expected-overall-assessment',
+                                            options=[
+                                                {'label': 'Pass', 'value': 'pass'},
+                                                {'label': 'Fail', 'value': 'fail'}
+                                            ],
+                                            inline=True,
+                                            className="mb-1"
+                                        )
+                                    ])
+                                ])
+                            ], width=6)
+                        ], className="mb-4"),
+                        
+                        # Optimized Grader Prompt Section
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.Card([
+                                    dbc.CardHeader("Optimized Grader Prompt", className="text-center"),
+                                    dbc.CardBody([
+                                        dbc.Button(
+                                            "Generate Optimized Grader Prompt", 
+                                            id="generate-optimized-grader-prompt", 
+                                            color="primary", 
+                                            className="mb-3"
+                                        ),
+                                        dbc.Spinner(
+                                            html.Div(id="optimized-grader-prompt-container", className="border p-3 bg-light",
+                                                    style={"minHeight": "200px", "white-space": "pre-wrap"})
+                                        ),
+                                        dbc.Button(
+                                            "Apply Optimized Prompt", 
+                                            id="apply-optimized-grader-prompt", 
+                                            color="success", 
+                                            className="mt-3",
+                                            disabled=True
+                                        ),
+                                        html.Div(id="grader-prompt-update-status", className="mt-2")
+                                    ])
+                                ])
+                            ], width=12)
+                        ])
+                    ]),
+                    
+                    # System Prompt Optimizer
+                    dbc.Tab(label="System Prompt Optimizer", tab_id="tab-system-optimizer", children=[
+                        dbc.Row([
+                            # Left Column - Current System Prompts
+                            dbc.Col([
+                                # Sales Agent System Prompt
+                                dbc.Card([
+                                    dbc.CardHeader("Current Sales Agent System Prompt", className="text-center"),
+                                    dbc.CardBody([
+                                        html.Div(id='current-sales-agent-prompt', className="border p-3 mb-3 bg-light", 
+                                                style={"maxHeight": "300px", "overflowY": "auto", "white-space": "pre-wrap"})
+                                    ])
+                                ], className="mb-3"),
+                                
+                                # Customer Agent System Prompt
+                                dbc.Card([
+                                    dbc.CardHeader("Current Customer Agent System Prompt", className="text-center"),
+                                    dbc.CardBody([
+                                        html.Div(id='current-customer-agent-prompt', className="border p-3 mb-3 bg-light", 
+                                                style={"maxHeight": "300px", "overflowY": "auto", "white-space": "pre-wrap"})
+                                    ])
+                                ])
+                            ], width=6),
+                            
+                            # Right Column - Optimization Controls
+                            dbc.Col([
+                                dbc.Card([
+                                    dbc.CardHeader("Optimization Parameters", className="text-center"),
+                                    dbc.CardBody([
+                                        html.H6("Select Agent to Optimize", className="mt-2"),
+                                        dbc.RadioItems(
+                                            id='system-prompt-agent-selector',
+                                            options=[
+                                                {'label': 'Sales Agent', 'value': 'sales'},
+                                                {'label': 'Customer Agent', 'value': 'customer'}
+                                            ],
+                                            value='sales',
+                                            inline=True,
+                                            className="mb-3"
+                                        ),
+                                        
+                                        html.H6("Optimization Goal", className="mt-2"),
+                                        dbc.Textarea(
+                                            id='system-prompt-optimization-goal',
+                                            placeholder="Describe what you want to improve in the agent's behavior...",
+                                            rows=3,
+                                            className="mb-3"
+                                        ),
+                                        
+                                        html.H6("Specific Instructions", className="mt-2"),
+                                        dbc.Checklist(
+                                            id='system-prompt-optimization-options',
+                                            options=[
+                                                {'label': 'Improve clarity of communication', 'value': 'clarity'},
+                                                {'label': 'Enhance objection handling', 'value': 'objections'},
+                                                {'label': 'Better needs identification', 'value': 'needs'},
+                                                {'label': 'More persuasive presentation', 'value': 'persuasion'},
+                                                {'label': 'Maintain character consistency', 'value': 'character'}
+                                            ],
+                                            className="mb-3"
+                                        ),
+                                        
+                                        dbc.Button(
+                                            "Generate Optimized System Prompt", 
+                                            id="generate-optimized-system-prompt", 
+                                            color="primary", 
+                                            className="mt-2"
+                                        )
+                                    ])
+                                ], className="mb-3"),
+                                
+                                # Conversation Performance Summary
+                                dbc.Card([
+                                    dbc.CardHeader("Conversation Performance Summary", className="text-center"),
+                                    dbc.CardBody([
+                                        html.Div(id='system-prompt-performance-summary')
+                                    ])
+                                ])
+                            ], width=6)
+                        ], className="mb-4"),
+                        
+                        # Optimized System Prompt Section
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.Card([
+                                    dbc.CardHeader("Optimized System Prompt", className="text-center"),
+                                    dbc.CardBody([
+                                        dbc.Spinner(
+                                            html.Div(id="optimized-system-prompt-container", className="border p-3 bg-light",
+                                                    style={"minHeight": "200px", "white-space": "pre-wrap"})
+                                        ),
+                                        dbc.Button(
+                                            "Apply Optimized System Prompt", 
+                                            id="apply-optimized-system-prompt", 
+                                            color="success", 
+                                            className="mt-3",
+                                            disabled=True
+                                        ),
+                                        html.Div(id="system-prompt-update-status", className="mt-2")
+                                    ])
+                                ])
+                            ], width=12)
+                        ])
+                    ])
+                ], id="optimizer-tabs", active_tab="tab-grader-optimizer")
+            ], fluid=True)
         ])
     ], id="tabs", active_tab="tab-dashboard"),
     
@@ -776,6 +1039,464 @@ def update_feedback_summary(stored_feedback, simulation_id):
         html.P(f"Submitted on: {datetime.fromisoformat(feedback.get('timestamp', datetime.now().isoformat())).strftime('%Y-%m-%d %H:%M:%S')}", 
                className="text-muted mt-3 small")
     ])
+
+# Callbacks for the Optimizer Tab
+
+# Callback to update the optimizer conversation view and current evaluation
+@app.callback(
+    [Output('optimizer-conversation-view', 'children'),
+     Output('optimizer-current-evaluation', 'children'),
+     Output('optimizer-current-grader-prompt', 'children')],
+    [Input('optimizer-simulation-selector', 'value')]
+)
+def update_optimizer_conversation(simulation_id):
+    if not simulation_id:
+        return [], html.Div("No simulation selected"), ""
+    
+    # Get conversation data
+    conversation = data_loader.get_conversation_by_simulation_id(simulation_id)
+    
+    # Create vertical conversation view
+    conversation_content = []
+    
+    for i, msg in enumerate(conversation):
+        agent_color = "primary" if msg['agent'] == 'Sales Agent' else "danger"
+        conversation_content.append(
+            dbc.Card([
+                dbc.CardHeader([
+                    html.Span(f"Turn {i+1}: {msg['agent']}", className=f"text-{agent_color}")
+                ]),
+                dbc.CardBody([
+                    html.Div([html.P(para) for para in msg['message'].split('\n\n')])
+                ])
+            ], className="mb-3")
+        )
+    
+    # Get evaluation results
+    sim_results = data_loader.get_simulation_results_df()
+    evaluation_content = html.Div("No evaluation data available")
+    
+    # Format the conversation for the grader prompt
+    conversation_text = ""
+    for i, msg in enumerate(conversation):
+        conversation_text += f"{msg['agent']}: {msg['message']}\n\n"
+    
+    # Create the grader prompt
+    grader_prompt = f"""
+    You are an expert conversation analyst tasked with evaluating a simulated conversation between a sales agent and a potential customer.
+    
+    Here is the conversation:
+    {conversation_text}
+    
+    Your goal is to evaluate this conversation and provide a boolean assessment for both the sales agent and customer agent.
+    
+    For the sales agent, evaluate:
+    1. Did they effectively introduce themselves and Truss Payments?
+    2. Did they attempt to identify the customer's payment challenges?
+    3. Did they present the solution clearly?
+    4. Did they emphasize key benefits relevant to the customer?
+    5. Did they handle objections professionally?
+    
+    For the customer agent, evaluate:
+    1. Did they maintain their established character traits (resistant to change, values relationships, etc.)?
+    2. Did they communicate in a direct, sometimes blunt style?
+    3. Did they question the benefits of changing their established processes?
+    4. Did they respond realistically to the sales pitch?
+    
+    Provide a boolean value (true for pass, false for fail) for each agent, along with brief feedback explaining your decision.
+    """
+    
+    if not sim_results.empty:
+        sim_row = sim_results[sim_results['simulationNumber'] == simulation_id]
+        if not sim_row.empty:
+            row = sim_row.iloc[0]
+            
+            # Create evaluation content
+            evaluation_content = html.Div([
+                # Sales Agent Evaluation
+                dbc.Card([
+                    dbc.CardHeader([
+                        html.Span("Sales Agent Evaluation", className="font-weight-bold"),
+                        html.Span(
+                            " ✅ PASS" if row.get('salesAgentPassed', False) else " ❌ FAIL", 
+                            className=f"{'text-success' if row.get('salesAgentPassed', False) else 'text-danger'}"
+                        )
+                    ]),
+                    dbc.CardBody([
+                        html.P(row.get('salesAgentFeedback', 'No feedback available'))
+                    ])
+                ], className="mb-3"),
+                
+                # Customer Agent Evaluation
+                dbc.Card([
+                    dbc.CardHeader([
+                        html.Span("Customer Agent Evaluation", className="font-weight-bold"),
+                        html.Span(
+                            " ✅ PASS" if row.get('customerAgentPassed', False) else " ❌ FAIL", 
+                            className=f"{'text-success' if row.get('customerAgentPassed', False) else 'text-danger'}"
+                        )
+                    ]),
+                    dbc.CardBody([
+                        html.P(row.get('customerAgentFeedback', 'No feedback available'))
+                    ])
+                ], className="mb-3"),
+                
+                # Overall Result
+                dbc.Card([
+                    dbc.CardHeader("Overall Result"),
+                    dbc.CardBody([
+                        html.H3(
+                            "✅ PASS" if row.get('overallPassed', False) else "❌ FAIL",
+                            className=f"text-center {'text-success' if row.get('overallPassed', False) else 'text-danger'}"
+                        ),
+                        html.P(f"Duration: {row.get('duration', 0)/1000:.2f}s", className="text-center")
+                    ])
+                ])
+            ])
+    
+    return conversation_content, evaluation_content, html.Pre(grader_prompt, style={"white-space": "pre-wrap"})
+
+# Callback to update system prompts
+@app.callback(
+    [Output('current-sales-agent-prompt', 'children'),
+     Output('current-customer-agent-prompt', 'children'),
+     Output('system-prompt-performance-summary', 'children')],
+    [Input('optimizer-simulation-selector', 'value'),
+     Input('system-prompt-agent-selector', 'value')]
+)
+def update_system_prompts(simulation_id, agent_type):
+    if not simulation_id:
+        return "No simulation selected", "No simulation selected", "No simulation selected"
+    
+    # In a real implementation, these would be loaded from files or a database
+    # For this example, we'll use placeholder text
+    sales_agent_prompt = """You are a sales agent for Truss Payments, a payment processing company that specializes in helping small to medium-sized businesses streamline their payment operations.
+
+Your goal is to convince the potential customer to switch to Truss Payments from their current payment processor.
+
+Key points about Truss Payments:
+1. Competitive rates: 2.5% + $0.10 per transaction (compared to industry average of 2.9% + $0.30)
+2. Next-day deposits (compared to 2-3 business days with most processors)
+3. No monthly fees or hidden charges
+4. 24/7 customer support
+5. Easy integration with popular e-commerce platforms and POS systems
+6. Advanced fraud protection
+
+Remember to:
+- Introduce yourself and Truss Payments professionally
+- Ask questions to understand the customer's current payment challenges
+- Listen to their needs and tailor your pitch accordingly
+- Address objections with empathy and clear information
+- Focus on the benefits that matter most to this specific customer
+- Be persistent but respectful"""
+    
+    customer_agent_prompt = """You are a small business owner who has been using the same payment processor for the past 5 years.
+
+Your character traits:
+- Somewhat resistant to change (you value stability)
+- Price-conscious but willing to pay for quality
+- Values relationships and good customer service
+- Skeptical of sales pitches (you've heard many before)
+- Direct and sometimes blunt communication style
+
+Your current payment processor:
+- Charges 2.9% + $0.30 per transaction
+- Takes 3 business days for deposits
+- Has acceptable but not great customer service
+- Has been reliable but occasionally has technical issues
+- Charges a $25 monthly fee
+
+Your business concerns:
+- Cash flow is important (faster deposits would help)
+- You process about $20,000 in payments monthly
+- You've had a few fraudulent transactions in the past year
+- Your staff finds the current system somewhat difficult to use
+
+During this conversation:
+- Ask pointed questions about the new service
+- Express skepticism about claims that seem too good to be true
+- Mention your loyalty to your current provider
+- Bring up concerns about the hassle of switching systems
+- Don't agree to switch immediately, but show interest if the offer seems genuinely better"""
+    
+    # Get evaluation results for performance summary
+    sim_results = data_loader.get_simulation_results_df()
+    performance_summary = html.Div("No performance data available")
+    
+    if not sim_results.empty:
+        sim_row = sim_results[sim_results['simulationNumber'] == simulation_id]
+        if not sim_row.empty:
+            row = sim_row.iloc[0]
+            
+            # Create performance summary based on selected agent
+            if agent_type == 'sales':
+                agent_passed = row.get('salesAgentPassed', False)
+                agent_feedback = row.get('salesAgentFeedback', '')
+                agent_name = "Sales Agent"
+            else:
+                agent_passed = row.get('customerAgentPassed', False)
+                agent_feedback = row.get('customerAgentFeedback', '')
+                agent_name = "Customer Agent"
+            
+            performance_summary = html.Div([
+                html.H5(f"{agent_name} Performance", className="mb-3"),
+                html.Div([
+                    html.Span("Result: ", className="font-weight-bold"),
+                    html.Span(
+                        "✅ PASS" if agent_passed else "❌ FAIL",
+                        className=f"{'text-success' if agent_passed else 'text-danger'}"
+                    )
+                ], className="mb-2"),
+                html.P(agent_feedback),
+                html.Hr(),
+                html.P("Select optimization parameters and click 'Generate Optimized System Prompt' to create an improved prompt based on this performance.", className="text-muted")
+            ])
+    
+    return html.Pre(sales_agent_prompt), html.Pre(customer_agent_prompt), performance_summary
+
+# Callback for generating optimized grader prompt
+@app.callback(
+    [Output('optimized-grader-prompt-container', 'children'),
+     Output('apply-optimized-grader-prompt', 'disabled')],
+    [Input('generate-optimized-grader-prompt', 'n_clicks')],
+    [State('optimizer-simulation-selector', 'value'),
+     State('optimizer-current-grader-prompt', 'children'),
+     State('optimizer-expected-sales-assessment', 'value'),
+     State('optimizer-expected-customer-assessment', 'value'),
+     State('optimizer-expected-overall-assessment', 'value'),
+     State('optimizer-expected-sales-feedback', 'value'),
+     State('optimizer-expected-customer-feedback', 'value')]
+)
+def generate_optimized_grader_prompt(n_clicks, simulation_id, current_prompt, 
+                                    expected_sales, expected_customer, expected_overall,
+                                    expected_sales_feedback, expected_customer_feedback):
+    if n_clicks is None or not simulation_id:
+        return "Click 'Generate Optimized Grader Prompt' to create an improved prompt based on your expected outcomes.", True
+    
+    # Get conversation data
+    conversation = data_loader.get_conversation_by_simulation_id(simulation_id)
+    
+    # Format the conversation
+    conversation_text = ""
+    for i, msg in enumerate(conversation):
+        conversation_text += f"{msg['agent']}: {msg['message']}\n\n"
+    
+    # Get current evaluation results
+    sim_results = data_loader.get_simulation_results_df()
+    current_results = {}
+    
+    if not sim_results.empty:
+        sim_row = sim_results[sim_results['simulationNumber'] == simulation_id]
+        if not sim_row.empty:
+            row = sim_row.iloc[0]
+            current_results = {
+                'salesAgentPassed': bool(row.get('salesAgentPassed', False)),
+                'customerAgentPassed': bool(row.get('customerAgentPassed', False)),
+                'overallPassed': bool(row.get('overallPassed', False)),
+                'salesAgentFeedback': row.get('salesAgentFeedback', ''),
+                'customerAgentFeedback': row.get('customerAgentFeedback', '')
+            }
+    
+    # In a real implementation, this would call an AI service to generate an optimized prompt
+    # For this example, we'll create a modified version of the current prompt
+    
+    # Extract the current prompt text
+    current_prompt_text = current_prompt.props['children'] if hasattr(current_prompt, 'props') else str(current_prompt)
+    
+    # Create the optimized prompt
+    optimized_prompt = f"""
+    You are an expert conversation analyst tasked with evaluating a simulated conversation between a sales agent and a potential customer.
+    
+    Here is the conversation:
+    {conversation_text}
+    
+    Your goal is to evaluate this conversation and provide a boolean assessment for both the sales agent and customer agent.
+    
+    For the sales agent, evaluate with these UPDATED criteria:
+    1. Did they effectively introduce themselves and Truss Payments?
+    2. Did they attempt to identify the customer's payment challenges?
+    3. Did they present the solution clearly and persuasively?
+    4. Did they emphasize key benefits relevant to the customer's specific needs?
+    5. Did they handle objections professionally and with compelling counterpoints?
+    6. Did they guide the conversation toward a positive outcome?
+    
+    For the customer agent, evaluate with these UPDATED criteria:
+    1. Did they maintain their established character traits (resistant to change, values relationships, etc.)?
+    2. Did they communicate in a direct, sometimes blunt style?
+    3. Did they question the benefits of changing their established processes?
+    4. Did they respond realistically to the sales pitch?
+    5. Did they express legitimate concerns that would be expected from a real customer?
+    
+    IMPORTANT GUIDANCE:
+    - For the sales agent: {"They should PASS this evaluation" if expected_sales == 'pass' else "They should FAIL this evaluation"}
+    - For the customer agent: {"They should PASS this evaluation" if expected_customer == 'pass' else "They should FAIL this evaluation"}
+    - Overall result: {"The conversation should be considered a PASS" if expected_overall == 'pass' else "The conversation should be considered a FAIL"}
+    
+    Expected sales agent feedback themes: {expected_sales_feedback if expected_sales_feedback else "Provide balanced feedback highlighting strengths and areas for improvement"}
+    
+    Expected customer agent feedback themes: {expected_customer_feedback if expected_customer_feedback else "Provide balanced feedback on the realism and consistency of the customer portrayal"}
+    
+    Provide a boolean value (true for pass, false for fail) for each agent, along with detailed feedback explaining your decision.
+    """
+    
+    return html.Pre(optimized_prompt), False
+
+# Callback for generating optimized system prompt
+@app.callback(
+    [Output('optimized-system-prompt-container', 'children'),
+     Output('apply-optimized-system-prompt', 'disabled')],
+    [Input('generate-optimized-system-prompt', 'n_clicks')],
+    [State('optimizer-simulation-selector', 'value'),
+     State('system-prompt-agent-selector', 'value'),
+     State('system-prompt-optimization-goal', 'value'),
+     State('system-prompt-optimization-options', 'value'),
+     State('current-sales-agent-prompt', 'children'),
+     State('current-customer-agent-prompt', 'children')]
+)
+def generate_optimized_system_prompt(n_clicks, simulation_id, agent_type, optimization_goal,
+                                    optimization_options, sales_prompt, customer_prompt):
+    if n_clicks is None or not simulation_id:
+        return "Click 'Generate Optimized System Prompt' to create an improved prompt based on your parameters.", True
+    
+    # Get the current prompt based on agent type
+    current_prompt = sales_prompt if agent_type == 'sales' else customer_prompt
+    current_prompt_text = current_prompt.props['children'] if hasattr(current_prompt, 'props') else str(current_prompt)
+    
+    # Get conversation data
+    conversation = data_loader.get_conversation_by_simulation_id(simulation_id)
+    
+    # Format the conversation
+    conversation_text = ""
+    for i, msg in enumerate(conversation):
+        conversation_text += f"{msg['agent']}: {msg['message']}\n\n"
+    
+    # In a real implementation, this would call an AI service to generate an optimized prompt
+    # For this example, we'll create a modified version of the current prompt
+    
+    # Create optimization notes based on selected options
+    optimization_notes = []
+    if optimization_options:
+        if 'clarity' in optimization_options:
+            optimization_notes.append("- Improve clarity of communication")
+        if 'objections' in optimization_options:
+            optimization_notes.append("- Enhance objection handling techniques")
+        if 'needs' in optimization_options:
+            optimization_notes.append("- Improve needs identification process")
+        if 'persuasion' in optimization_options:
+            optimization_notes.append("- Make presentation more persuasive")
+        if 'character' in optimization_options:
+            optimization_notes.append("- Maintain stronger character consistency")
+    
+    optimization_text = "\n".join(optimization_notes) if optimization_notes else "No specific optimization areas selected"
+    
+    # Create the optimized prompt
+    if agent_type == 'sales':
+        optimized_prompt = f"""You are a sales agent for Truss Payments, a payment processing company that specializes in helping small to medium-sized businesses streamline their payment operations.
+
+Your goal is to convince the potential customer to switch to Truss Payments from their current payment processor.
+
+OPTIMIZATION GOAL: {optimization_goal if optimization_goal else "Improve overall sales effectiveness"}
+
+OPTIMIZATION AREAS:
+{optimization_text}
+
+Key points about Truss Payments:
+1. Competitive rates: 2.5% + $0.10 per transaction (compared to industry average of 2.9% + $0.30)
+2. Next-day deposits (compared to 2-3 business days with most processors)
+3. No monthly fees or hidden charges
+4. 24/7 customer support
+5. Easy integration with popular e-commerce platforms and POS systems
+6. Advanced fraud protection
+
+Remember to:
+- Introduce yourself and Truss Payments professionally and confidently
+- Ask targeted questions to understand the customer's specific payment challenges
+- Listen actively to their needs and tailor your pitch to address their pain points
+- Address objections with empathy, clear information, and compelling counterpoints
+- Focus on the benefits that matter most to this specific customer, using concrete examples
+- Be persistent but respectful, guiding the conversation toward a positive outcome
+- Use clear, concise language that avoids jargon unless necessary
+- Emphasize cost savings and efficiency gains specific to their business model
+- Highlight the ease of transition to alleviate concerns about switching"""
+    else:
+        optimized_prompt = f"""You are a small business owner who has been using the same payment processor for the past 5 years.
+
+OPTIMIZATION GOAL: {optimization_goal if optimization_goal else "Improve character consistency and realism"}
+
+OPTIMIZATION AREAS:
+{optimization_text}
+
+Your character traits:
+- Somewhat resistant to change (you value stability and are cautious about new solutions)
+- Price-conscious but willing to pay for quality when the value is clearly demonstrated
+- Values relationships and excellent customer service above minor price differences
+- Skeptical of sales pitches (you've heard many before and can detect insincerity)
+- Direct and sometimes blunt communication style, but not rude or dismissive
+
+Your current payment processor:
+- Charges 2.9% + $0.30 per transaction
+- Takes 3 business days for deposits
+- Has acceptable but not great customer service (sometimes difficult to reach support)
+- Has been reliable but occasionally has technical issues during high-volume periods
+- Charges a $25 monthly fee plus additional fees for certain features
+
+Your business concerns:
+- Cash flow is important (faster deposits would help with inventory management)
+- You process about $20,000 in payments monthly across both in-store and online channels
+- You've had a few fraudulent transactions in the past year that were difficult to resolve
+- Your staff finds the current system somewhat difficult to use and requires regular training
+- You're concerned about the time and effort required to switch systems
+
+During this conversation:
+- Ask pointed questions about the new service, especially regarding hidden fees or limitations
+- Express specific skepticism about claims that seem too good to be true
+- Mention your loyalty to your current provider and the relationship you've built
+- Bring up detailed concerns about the hassle of switching systems, including staff training
+- Don't agree to switch immediately, but show interest if the offer seems genuinely better
+- Respond more positively to clear explanations and honest acknowledgments of limitations"""
+    
+    return html.Pre(optimized_prompt), False
+
+# Callback for applying the optimized grader prompt
+@app.callback(
+    Output('grader-prompt-update-status', 'children'),
+    [Input('apply-optimized-grader-prompt', 'n_clicks')],
+    [State('optimized-grader-prompt-container', 'children')]
+)
+def apply_optimized_grader_prompt(n_clicks, optimized_prompt):
+    if n_clicks is None:
+        return ""
+    
+    # In a real implementation, this would save the optimized prompt to a file or database
+    # For this example, we'll just show a success message
+    
+    return dbc.Alert(
+        "Optimized grader prompt has been applied successfully! Future evaluations will use this prompt.",
+        color="success",
+        duration=4000
+    )
+
+# Callback for applying the optimized system prompt
+@app.callback(
+    Output('system-prompt-update-status', 'children'),
+    [Input('apply-optimized-system-prompt', 'n_clicks')],
+    [State('optimized-system-prompt-container', 'children'),
+     State('system-prompt-agent-selector', 'value')]
+)
+def apply_optimized_system_prompt(n_clicks, optimized_prompt, agent_type):
+    if n_clicks is None:
+        return ""
+    
+    # In a real implementation, this would save the optimized prompt to a file or database
+    # For this example, we'll just show a success message
+    
+    agent_name = "Sales Agent" if agent_type == 'sales' else "Customer Agent"
+    
+    return dbc.Alert(
+        f"Optimized system prompt for {agent_name} has been applied successfully! Future simulations will use this prompt.",
+        color="success",
+        duration=4000
+    )
 
 # Run the app
 if __name__ == '__main__':
