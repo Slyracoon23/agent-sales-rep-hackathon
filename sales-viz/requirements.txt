@@ -6,4 +6,6 @@ numpy==1.26.2
 dash-table==5.0.0
 dash-core-components==2.0.0
 dash-html-components==2.0.0
-dash-renderer==1.9.1 
+dash-renderer==1.9.1
+openai==1.65.2
+python-dotenv==1.0.0 

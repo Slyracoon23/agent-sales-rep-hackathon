@@ -7,10 +7,149 @@ import pandas as pd
 import os
 import json
 from datetime import datetime
+from openai import OpenAI
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Import our custom modules
 from data_loader import SalesSimulationData
 import visualizations as viz
+
+# Initialize the OpenAI client
+openai_api_key = os.environ.get("OPENAI_API_KEY")
+try:
+    # Try to initialize the OpenAI client with just the API key
+    openai_client = OpenAI(api_key=openai_api_key)
+except TypeError as e:
+    # If that fails, try without any additional parameters that might cause issues
+    if "unexpected keyword argument" in str(e):
+        print(f"Warning: {e}. Trying alternative initialization.")
+        openai_client = OpenAI()
+        openai_client.api_key = openai_api_key
+    else:
+        raise e
+
+# Check if OpenAI API key is set
+has_openai_api_key = openai_api_key is not None
+
+# Function to generate optimized prompts using OpenAI
+def generate_optimized_prompt_with_openai(current_prompt, conversation_text, optimization_goal, optimization_areas, agent_type):
+    """
+    Generate an optimized prompt using OpenAI's GPT-4o-mini model.
+    
+    Args:
+        current_prompt (str): The current system prompt
+        conversation_text (str): The conversation text
+        optimization_goal (str): The goal of the optimization
+        optimization_areas (str): Specific areas to optimize
+        agent_type (str): Either 'sales' or 'customer'
+        
+    Returns:
+        str: The optimized prompt
+    """
+    try:
+        # Create the system message
+        system_message = """You are an expert prompt engineer specializing in optimizing prompts for sales and customer simulations.
+Your task is to improve a system prompt based on the provided conversation, optimization goals, and areas for improvement."""
+
+        # Create the user message
+        user_message = f"""Please optimize the following {agent_type} agent system prompt based on the conversation and optimization parameters:
+
+CURRENT PROMPT:
+{current_prompt}
+
+SAMPLE CONVERSATION:
+{conversation_text}
+
+OPTIMIZATION GOAL:
+{optimization_goal if optimization_goal else "Improve overall effectiveness"}
+
+AREAS TO OPTIMIZE:
+{optimization_areas}
+
+Please provide an improved version of the prompt that addresses the optimization goals and areas.
+The optimized prompt should maintain the same general structure but enhance the specified areas.
+Focus on making the prompt more effective for the {agent_type} agent role.
+"""
+
+        # Call the OpenAI API
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.7,
+            max_tokens=1500
+        )
+        
+        # Extract and return the optimized prompt
+        optimized_prompt = response.choices[0].message.content
+        return optimized_prompt
+    
+    except Exception as e:
+        print(f"Error calling OpenAI API: {str(e)}")
+        return f"Error generating optimized prompt: {str(e)}"
+
+# Function to generate optimized grader prompts using OpenAI
+def generate_optimized_grader_prompt_with_openai(current_prompt, conversation_text, expected_outcomes):
+    """
+    Generate an optimized grader prompt using OpenAI's GPT-4o-mini model.
+    
+    Args:
+        current_prompt (str): The current grader prompt
+        conversation_text (str): The conversation text
+        expected_outcomes (dict): Expected outcomes for the grader
+        
+    Returns:
+        str: The optimized grader prompt
+    """
+    try:
+        # Create the system message
+        system_message = """You are an expert prompt engineer specializing in optimizing evaluation prompts for sales conversations.
+Your task is to improve a grader prompt based on the provided conversation and expected outcomes."""
+
+        # Create the user message
+        user_message = f"""Please optimize the following grader prompt based on the conversation and expected outcomes:
+
+CURRENT GRADER PROMPT:
+{current_prompt}
+
+SAMPLE CONVERSATION:
+{conversation_text}
+
+EXPECTED OUTCOMES:
+- Sales Agent Assessment: {expected_outcomes.get('sales_assessment', 'Not specified')}
+- Sales Agent Feedback Focus: {expected_outcomes.get('sales_feedback', 'Not specified')}
+- Customer Agent Assessment: {expected_outcomes.get('customer_assessment', 'Not specified')}
+- Customer Agent Feedback Focus: {expected_outcomes.get('customer_feedback', 'Not specified')}
+- Overall Assessment: {expected_outcomes.get('overall_assessment', 'Not specified')}
+
+Please provide an improved version of the grader prompt that will lead to the expected outcomes.
+The optimized prompt should maintain the same general structure but include clearer evaluation criteria
+that would guide an evaluator toward the expected assessments.
+"""
+
+        # Call the OpenAI API
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.7,
+            max_tokens=1500
+        )
+        
+        # Extract and return the optimized prompt
+        optimized_prompt = response.choices[0].message.content
+        return optimized_prompt
+    
+    except Exception as e:
+        print(f"Error calling OpenAI API: {str(e)}")
+        return f"Error generating optimized grader prompt: {str(e)}"
 
 # Initialize the data loader
 data_loader = SalesSimulationData()
@@ -422,6 +561,32 @@ app.layout = html.Div([
                     ], width=12)
                 ]),
                 
+                # API Key Warning (if not set)
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Alert(
+                            [
+                                html.H4("OpenAI API Key Not Set", className="alert-heading"),
+                                html.P(
+                                    "The OpenAI API key is not set. The optimizer will not work without a valid API key.",
+                                    className="mb-0"
+                                ),
+                                html.Hr(),
+                                html.P([
+                                    "Please set the OPENAI_API_KEY in your .env file. ",
+                                    "Copy the .env.example file to .env and add your API key."
+                                ],
+                                    className="mb-0"
+                                )
+                            ],
+                            color="warning",
+                            dismissable=True,
+                            is_open=not has_openai_api_key,
+                            className="mb-4"
+                        )
+                    ], width=12)
+                ]) if not has_openai_api_key else html.Div(),
+                
                 # Simulation Selector for Optimizer
                 dbc.Row([
                     dbc.Col([
@@ -545,11 +710,15 @@ app.layout = html.Div([
                                             "Generate Optimized Grader Prompt", 
                                             id="generate-optimized-grader-prompt", 
                                             color="primary", 
-                                            className="mb-3"
+                                            className="mb-3",
+                                            disabled=not has_openai_api_key
                                         ),
                                         dbc.Spinner(
                                             html.Div(id="optimized-grader-prompt-container", className="border p-3 bg-light",
-                                                    style={"minHeight": "200px", "white-space": "pre-wrap"})
+                                                    style={"minHeight": "200px", "white-space": "pre-wrap"}),
+                                            color="primary",
+                                            type="border",
+                                            fullscreen=False,
                                         ),
                                         dbc.Button(
                                             "Apply Optimized Prompt", 
@@ -631,7 +800,8 @@ app.layout = html.Div([
                                             "Generate Optimized System Prompt", 
                                             id="generate-optimized-system-prompt", 
                                             color="primary", 
-                                            className="mt-2"
+                                            className="mt-2",
+                                            disabled=not has_openai_api_key
                                         )
                                     ])
                                 ], className="mb-3"),
@@ -654,7 +824,10 @@ app.layout = html.Div([
                                     dbc.CardBody([
                                         dbc.Spinner(
                                             html.Div(id="optimized-system-prompt-container", className="border p-3 bg-light",
-                                                    style={"minHeight": "200px", "white-space": "pre-wrap"})
+                                                    style={"minHeight": "200px", "white-space": "pre-wrap"}),
+                                            color="primary",
+                                            type="border",
+                                            fullscreen=False,
                                         ),
                                         dbc.Button(
                                             "Apply Optimized System Prompt", 
@@ -1102,8 +1275,14 @@ def update_optimizer_conversation(simulation_id):
     2. Did they communicate in a direct, sometimes blunt style?
     3. Did they question the benefits of changing their established processes?
     4. Did they respond realistically to the sales pitch?
+    5. Did they express legitimate concerns that would be expected from a real customer?
     
-    Provide a boolean value (true for pass, false for fail) for each agent, along with brief feedback explaining your decision.
+    IMPORTANT GUIDANCE:
+    - For the sales agent: Consider whether they effectively communicated value and addressed customer concerns
+    - For the customer agent: Consider whether they maintained a realistic customer persona throughout the conversation
+    - Overall result: Consider whether the conversation demonstrates effective sales techniques and realistic customer interactions
+    
+    Provide a boolean value (true for pass, false for fail) for each agent, along with detailed feedback explaining your decision.
     """
     
     if not sim_results.empty:
@@ -1297,14 +1476,20 @@ def generate_optimized_grader_prompt(n_clicks, simulation_id, current_prompt,
                 'customerAgentFeedback': row.get('customerAgentFeedback', '')
             }
     
-    # In a real implementation, this would call an AI service to generate an optimized prompt
-    # For this example, we'll create a modified version of the current prompt
-    
     # Extract the current prompt text
     current_prompt_text = current_prompt.props['children'] if hasattr(current_prompt, 'props') else str(current_prompt)
     
-    # Create the optimized prompt
-    optimized_prompt = f"""
+    # Create expected outcomes dictionary
+    expected_outcomes = {
+        'sales_assessment': expected_sales if expected_sales else 'Not specified',
+        'sales_feedback': expected_sales_feedback if expected_sales_feedback else 'Not specified',
+        'customer_assessment': expected_customer if expected_customer else 'Not specified',
+        'customer_feedback': expected_customer_feedback if expected_customer_feedback else 'Not specified',
+        'overall_assessment': expected_overall if expected_overall else 'Not specified'
+    }
+    
+    # Create a modified prompt with the expected outcomes for OpenAI to use as reference
+    modified_prompt_for_openai = f"""
     You are an expert conversation analyst tasked with evaluating a simulated conversation between a sales agent and a potential customer.
     
     Here is the conversation:
@@ -1312,15 +1497,14 @@ def generate_optimized_grader_prompt(n_clicks, simulation_id, current_prompt,
     
     Your goal is to evaluate this conversation and provide a boolean assessment for both the sales agent and customer agent.
     
-    For the sales agent, evaluate with these UPDATED criteria:
+    For the sales agent, evaluate:
     1. Did they effectively introduce themselves and Truss Payments?
     2. Did they attempt to identify the customer's payment challenges?
-    3. Did they present the solution clearly and persuasively?
-    4. Did they emphasize key benefits relevant to the customer's specific needs?
-    5. Did they handle objections professionally and with compelling counterpoints?
-    6. Did they guide the conversation toward a positive outcome?
+    3. Did they present the solution clearly?
+    4. Did they emphasize key benefits relevant to the customer?
+    5. Did they handle objections professionally?
     
-    For the customer agent, evaluate with these UPDATED criteria:
+    For the customer agent, evaluate:
     1. Did they maintain their established character traits (resistant to change, values relationships, etc.)?
     2. Did they communicate in a direct, sometimes blunt style?
     3. Did they question the benefits of changing their established processes?
@@ -1338,6 +1522,13 @@ def generate_optimized_grader_prompt(n_clicks, simulation_id, current_prompt,
     
     Provide a boolean value (true for pass, false for fail) for each agent, along with detailed feedback explaining your decision.
     """
+    
+    # Use OpenAI to generate the optimized grader prompt
+    optimized_prompt = generate_optimized_grader_prompt_with_openai(
+        modified_prompt_for_openai,
+        conversation_text,
+        expected_outcomes
+    )
     
     return html.Pre(optimized_prompt), False
 
@@ -1370,9 +1561,6 @@ def generate_optimized_system_prompt(n_clicks, simulation_id, agent_type, optimi
     for i, msg in enumerate(conversation):
         conversation_text += f"{msg['agent']}: {msg['message']}\n\n"
     
-    # In a real implementation, this would call an AI service to generate an optimized prompt
-    # For this example, we'll create a modified version of the current prompt
-    
     # Create optimization notes based on selected options
     optimization_notes = []
     if optimization_options:
@@ -1389,71 +1577,14 @@ def generate_optimized_system_prompt(n_clicks, simulation_id, agent_type, optimi
     
     optimization_text = "\n".join(optimization_notes) if optimization_notes else "No specific optimization areas selected"
     
-    # Create the optimized prompt
-    if agent_type == 'sales':
-        optimized_prompt = f"""You are a sales agent for Truss Payments, a payment processing company that specializes in helping small to medium-sized businesses streamline their payment operations.
-
-Your goal is to convince the potential customer to switch to Truss Payments from their current payment processor.
-
-OPTIMIZATION GOAL: {optimization_goal if optimization_goal else "Improve overall sales effectiveness"}
-
-OPTIMIZATION AREAS:
-{optimization_text}
-
-Key points about Truss Payments:
-1. Competitive rates: 2.5% + $0.10 per transaction (compared to industry average of 2.9% + $0.30)
-2. Next-day deposits (compared to 2-3 business days with most processors)
-3. No monthly fees or hidden charges
-4. 24/7 customer support
-5. Easy integration with popular e-commerce platforms and POS systems
-6. Advanced fraud protection
-
-Remember to:
-- Introduce yourself and Truss Payments professionally and confidently
-- Ask targeted questions to understand the customer's specific payment challenges
-- Listen actively to their needs and tailor your pitch to address their pain points
-- Address objections with empathy, clear information, and compelling counterpoints
-- Focus on the benefits that matter most to this specific customer, using concrete examples
-- Be persistent but respectful, guiding the conversation toward a positive outcome
-- Use clear, concise language that avoids jargon unless necessary
-- Emphasize cost savings and efficiency gains specific to their business model
-- Highlight the ease of transition to alleviate concerns about switching"""
-    else:
-        optimized_prompt = f"""You are a small business owner who has been using the same payment processor for the past 5 years.
-
-OPTIMIZATION GOAL: {optimization_goal if optimization_goal else "Improve character consistency and realism"}
-
-OPTIMIZATION AREAS:
-{optimization_text}
-
-Your character traits:
-- Somewhat resistant to change (you value stability and are cautious about new solutions)
-- Price-conscious but willing to pay for quality when the value is clearly demonstrated
-- Values relationships and excellent customer service above minor price differences
-- Skeptical of sales pitches (you've heard many before and can detect insincerity)
-- Direct and sometimes blunt communication style, but not rude or dismissive
-
-Your current payment processor:
-- Charges 2.9% + $0.30 per transaction
-- Takes 3 business days for deposits
-- Has acceptable but not great customer service (sometimes difficult to reach support)
-- Has been reliable but occasionally has technical issues during high-volume periods
-- Charges a $25 monthly fee plus additional fees for certain features
-
-Your business concerns:
-- Cash flow is important (faster deposits would help with inventory management)
-- You process about $20,000 in payments monthly across both in-store and online channels
-- You've had a few fraudulent transactions in the past year that were difficult to resolve
-- Your staff finds the current system somewhat difficult to use and requires regular training
-- You're concerned about the time and effort required to switch systems
-
-During this conversation:
-- Ask pointed questions about the new service, especially regarding hidden fees or limitations
-- Express specific skepticism about claims that seem too good to be true
-- Mention your loyalty to your current provider and the relationship you've built
-- Bring up detailed concerns about the hassle of switching systems, including staff training
-- Don't agree to switch immediately, but show interest if the offer seems genuinely better
-- Respond more positively to clear explanations and honest acknowledgments of limitations"""
+    # Use OpenAI to generate the optimized prompt
+    optimized_prompt = generate_optimized_prompt_with_openai(
+        current_prompt_text,
+        conversation_text,
+        optimization_goal,
+        optimization_text,
+        "sales agent" if agent_type == 'sales' else "customer agent"
+    )
     
     return html.Pre(optimized_prompt), False
 
