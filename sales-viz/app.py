@@ -305,6 +305,107 @@ app.layout = html.Div([
                             ])
                         ])
                     ], width=4)
+                ], className="mb-4"),
+                
+                # Grader Prompt and User Feedback Section
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Card([
+                            dbc.CardHeader("Grader Prompt", className="text-center"),
+                            dbc.CardBody([
+                                html.Div(id='grader-prompt', className="border p-3 mb-3 bg-light"),
+                                html.Hr(),
+                                html.H5("User Feedback", className="mt-3"),
+                                html.P("Do you agree with the grader's evaluation? Provide your feedback below:"),
+                                
+                                # Sales Agent Evaluation Feedback
+                                html.H6("Sales Agent Evaluation", className="mt-3"),
+                                dbc.Form([
+                                    dbc.Label("Your Assessment:"),
+                                    dbc.RadioItems(
+                                        id='user-sales-agent-assessment',
+                                        options=[
+                                            {'label': 'Pass', 'value': 'pass'},
+                                            {'label': 'Fail', 'value': 'fail'}
+                                        ],
+                                        inline=True,
+                                        className="mb-2"
+                                    ),
+                                    dbc.Textarea(
+                                        id='user-sales-agent-feedback',
+                                        placeholder="Explain why you agree or disagree with the grader's assessment of the sales agent...",
+                                        rows=3,
+                                        className="mb-3"
+                                    )
+                                ]),
+                                
+                                # Customer Agent Evaluation Feedback
+                                html.H6("Customer Agent Evaluation", className="mt-3"),
+                                dbc.Form([
+                                    dbc.Label("Your Assessment:"),
+                                    dbc.RadioItems(
+                                        id='user-customer-agent-assessment',
+                                        options=[
+                                            {'label': 'Pass', 'value': 'pass'},
+                                            {'label': 'Fail', 'value': 'fail'}
+                                        ],
+                                        inline=True,
+                                        className="mb-2"
+                                    ),
+                                    dbc.Textarea(
+                                        id='user-customer-agent-feedback',
+                                        placeholder="Explain why you agree or disagree with the grader's assessment of the customer agent...",
+                                        rows=3,
+                                        className="mb-3"
+                                    )
+                                ]),
+                                
+                                # Overall Feedback
+                                html.H6("Overall Feedback", className="mt-3"),
+                                dbc.Form([
+                                    dbc.Label("Your Overall Assessment:"),
+                                    dbc.RadioItems(
+                                        id='user-overall-assessment',
+                                        options=[
+                                            {'label': 'Pass', 'value': 'pass'},
+                                            {'label': 'Fail', 'value': 'fail'}
+                                        ],
+                                        inline=True,
+                                        className="mb-2"
+                                    ),
+                                    dbc.Textarea(
+                                        id='user-overall-feedback',
+                                        placeholder="Provide your overall feedback on this conversation...",
+                                        rows=4,
+                                        className="mb-3"
+                                    )
+                                ]),
+                                
+                                # Submit Button
+                                dbc.Button(
+                                    "Submit Feedback", 
+                                    id="submit-feedback", 
+                                    color="primary", 
+                                    className="mt-2"
+                                ),
+                                
+                                # Feedback Submission Status
+                                html.Div(id="feedback-submission-status", className="mt-3")
+                            ])
+                        ])
+                    ], width=12)
+                ], className="mb-4"),
+                
+                # User Feedback Summary
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Card([
+                            dbc.CardHeader("User Feedback Summary", className="text-center"),
+                            dbc.CardBody([
+                                html.Div(id='user-feedback-summary')
+                            ])
+                        ])
+                    ], width=12)
                 ], className="mb-4")
             ], fluid=True)
         ])
@@ -317,7 +418,10 @@ app.layout = html.Div([
             html.P("Sales Simulation Dashboard • Created with Dash and Plotly", className="text-center text-muted"),
             html.P(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", className="text-center text-muted small")
         ], width=12)
-    ])
+    ]),
+    
+    # Store components for saving user feedback
+    dcc.Store(id='user-feedback-store', storage_type='session')
 ], className="container-fluid")
 
 # Callbacks
@@ -392,12 +496,13 @@ def update_conversation_visualizations(simulation_id):
 # Update the callback for conversation detail view
 @app.callback(
     [Output('conversation-detail-view', 'children'),
-     Output('conversation-detail-evaluation', 'children')],
+     Output('conversation-detail-evaluation', 'children'),
+     Output('grader-prompt', 'children')],
     [Input('conversation-detail-selector', 'value')]
 )
 def update_conversation_detail(simulation_id):
     if not simulation_id:
-        return [], html.Div("No simulation selected")
+        return [], html.Div("No simulation selected"), ""
     
     # Get conversation data
     conversation = data_loader.get_conversation_by_simulation_id(simulation_id)
@@ -421,6 +526,36 @@ def update_conversation_detail(simulation_id):
     # Get evaluation results
     sim_results = data_loader.get_simulation_results_df()
     evaluation_content = html.Div("No evaluation data available")
+    
+    # Format the conversation for the grader prompt
+    conversation_text = ""
+    for i, msg in enumerate(conversation):
+        conversation_text += f"{msg['agent']}: {msg['message']}\n\n"
+    
+    # Create the grader prompt
+    grader_prompt = f"""
+    You are an expert conversation analyst tasked with evaluating a simulated conversation between a sales agent and a potential customer.
+    
+    Here is the conversation:
+    {conversation_text}
+    
+    Your goal is to evaluate this conversation and provide a boolean assessment for both the sales agent and customer agent.
+    
+    For the sales agent, evaluate:
+    1. Did they effectively introduce themselves and Truss Payments?
+    2. Did they attempt to identify the customer's payment challenges?
+    3. Did they present the solution clearly?
+    4. Did they emphasize key benefits relevant to the customer?
+    5. Did they handle objections professionally?
+    
+    For the customer agent, evaluate:
+    1. Did they maintain their established character traits (resistant to change, values relationships, etc.)?
+    2. Did they communicate in a direct, sometimes blunt style?
+    3. Did they question the benefits of changing their established processes?
+    4. Did they respond realistically to the sales pitch?
+    
+    Provide a boolean value (true for pass, false for fail) for each agent, along with brief feedback explaining your decision.
+    """
     
     if not sim_results.empty:
         sim_row = sim_results[sim_results['simulationNumber'] == simulation_id]
@@ -462,15 +597,128 @@ def update_conversation_detail(simulation_id):
                     dbc.CardHeader("Overall Result"),
                     dbc.CardBody([
                         html.H3(
-                            "✅ PASS" if row.get('passed', False) else "❌ FAIL",
-                            className=f"text-center {'text-success' if row.get('passed', False) else 'text-danger'}"
+                            "✅ PASS" if row.get('overallPassed', False) else "❌ FAIL",
+                            className=f"text-center {'text-success' if row.get('overallPassed', False) else 'text-danger'}"
                         ),
-                        html.P(f"Duration: {row.get('duration', 'N/A')}s", className="text-center")
+                        html.P(f"Duration: {row.get('duration', 0)/1000:.2f}s", className="text-center")
                     ])
                 ])
             ])
     
-    return conversation_content, evaluation_content
+    return conversation_content, evaluation_content, html.Pre(grader_prompt, style={"white-space": "pre-wrap"})
+
+# Callback to handle feedback submission
+@app.callback(
+    [Output('feedback-submission-status', 'children'),
+     Output('user-feedback-store', 'data')],
+    [Input('submit-feedback', 'n_clicks')],
+    [State('conversation-detail-selector', 'value'),
+     State('user-sales-agent-assessment', 'value'),
+     State('user-sales-agent-feedback', 'value'),
+     State('user-customer-agent-assessment', 'value'),
+     State('user-customer-agent-feedback', 'value'),
+     State('user-overall-assessment', 'value'),
+     State('user-overall-feedback', 'value'),
+     State('user-feedback-store', 'data')]
+)
+def submit_feedback(n_clicks, simulation_id, sales_assessment, sales_feedback, 
+                   customer_assessment, customer_feedback, overall_assessment, 
+                   overall_feedback, stored_feedback):
+    if n_clicks is None:
+        return "", stored_feedback or {}
+    
+    if not simulation_id:
+        return dbc.Alert("No simulation selected", color="warning"), stored_feedback or {}
+    
+    # Initialize feedback store if it doesn't exist
+    if stored_feedback is None:
+        stored_feedback = {}
+    
+    # Create feedback entry
+    feedback_entry = {
+        'timestamp': datetime.now().isoformat(),
+        'sales_assessment': sales_assessment,
+        'sales_feedback': sales_feedback,
+        'customer_assessment': customer_assessment,
+        'customer_feedback': customer_feedback,
+        'overall_assessment': overall_assessment,
+        'overall_feedback': overall_feedback
+    }
+    
+    # Store feedback by simulation ID
+    stored_feedback[str(simulation_id)] = feedback_entry
+    
+    # Save to a JSON file (optional)
+    try:
+        feedback_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'user_feedback')
+        os.makedirs(feedback_dir, exist_ok=True)
+        
+        feedback_file = os.path.join(feedback_dir, f'feedback_sim_{simulation_id}.json')
+        with open(feedback_file, 'w') as f:
+            json.dump(feedback_entry, f, indent=2)
+        
+        return dbc.Alert("Feedback submitted successfully and saved to file!", color="success"), stored_feedback
+    except Exception as e:
+        return dbc.Alert(f"Feedback stored in session, but could not save to file: {str(e)}", color="warning"), stored_feedback
+
+# Callback to display user feedback summary
+@app.callback(
+    Output('user-feedback-summary', 'children'),
+    [Input('user-feedback-store', 'data'),
+     Input('conversation-detail-selector', 'value')]
+)
+def update_feedback_summary(stored_feedback, simulation_id):
+    if not stored_feedback or not simulation_id or str(simulation_id) not in stored_feedback:
+        return html.P("No feedback has been submitted for this conversation yet.")
+    
+    feedback = stored_feedback[str(simulation_id)]
+    
+    return html.Div([
+        html.H5("Your Assessment", className="mb-3"),
+        
+        # Sales Agent Assessment
+        dbc.Card([
+            dbc.CardHeader([
+                html.Span("Sales Agent", className="font-weight-bold"),
+                html.Span(
+                    " ✅ PASS" if feedback.get('sales_assessment') == 'pass' else " ❌ FAIL", 
+                    className=f"{'text-success' if feedback.get('sales_assessment') == 'pass' else 'text-danger'}"
+                )
+            ]),
+            dbc.CardBody([
+                html.P(feedback.get('sales_feedback', 'No feedback provided'))
+            ])
+        ], className="mb-3"),
+        
+        # Customer Agent Assessment
+        dbc.Card([
+            dbc.CardHeader([
+                html.Span("Customer Agent", className="font-weight-bold"),
+                html.Span(
+                    " ✅ PASS" if feedback.get('customer_assessment') == 'pass' else " ❌ FAIL", 
+                    className=f"{'text-success' if feedback.get('customer_assessment') == 'pass' else 'text-danger'}"
+                )
+            ]),
+            dbc.CardBody([
+                html.P(feedback.get('customer_feedback', 'No feedback provided'))
+            ])
+        ], className="mb-3"),
+        
+        # Overall Assessment
+        dbc.Card([
+            dbc.CardHeader("Overall Assessment"),
+            dbc.CardBody([
+                html.H3(
+                    "✅ PASS" if feedback.get('overall_assessment') == 'pass' else "❌ FAIL",
+                    className=f"text-center {'text-success' if feedback.get('overall_assessment') == 'pass' else 'text-danger'}"
+                ),
+                html.P(feedback.get('overall_feedback', 'No overall feedback provided'), className="mt-3")
+            ])
+        ]),
+        
+        html.P(f"Submitted on: {datetime.fromisoformat(feedback.get('timestamp', datetime.now().isoformat())).strftime('%Y-%m-%d %H:%M:%S')}", 
+               className="text-muted mt-3 small")
+    ])
 
 # Run the app
 if __name__ == '__main__':
