@@ -324,6 +324,7 @@ describe('Sales Call Simulation', () => {
       
       // Set up simulation parameters
       const maxTurns = 50;
+      const simulationStartTime = Date.now();
       console.log(`\n📊 Starting Sales Call Simulation #${simulation.id} (starting from conversation index ${conversationStartIndex})`);
       
       // Log the initial conversation first with colors
@@ -437,7 +438,7 @@ describe('Sales Call Simulation', () => {
       console.log(`Starting Index: ${conversationStartIndex}`);
       console.log(`Sales Agent: ${salesAgentResult ? '✅ PASSED' : '❌ FAILED'}`);
       console.log(`Customer Agent: ${customerAgentResult ? '✅ PASSED' : '❌ FAILED'}`);
-      
+            
       // Store the results for summary analysis
       simulationResults.push({
         simulationNumber: simulation.id,
