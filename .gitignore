@@ -5,6 +5,7 @@ node_modules/
 # TypeScript compiled output
 dist/
 build/
+/.next/
 *.tsbuildinfo
 
 # Environment variables
