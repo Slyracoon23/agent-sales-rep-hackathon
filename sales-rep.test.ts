@@ -15,20 +15,20 @@ if (!process.env.OPENAI_API_KEY) {
 }
 
 // Define schemas based on the YAML configuration
+const SalesAgentEvaluationSchema = z.object({
+  salesAgent: z.boolean(),
+  salesAgentFeedback: z.string().optional()
+});
+
+const CustomerAgentEvaluationSchema = z.object({
+  customerAgent: z.boolean(),
+  customerAgentFeedback: z.string().optional()
+});
+
 const JudgeEvaluationSchema = z.object({
-  overallScore: z.number().min(0).max(100),
-  metrics: z.object({
-    conversationNaturalness: z.number().min(0).max(25),
-    informationExchange: z.number().min(0).max(25),
-    goalProgress: z.number().min(0).max(25),
-    techniqueDemonstration: z.number().min(0).max(25)
-  }),
-  feedback: z.string(),
-  agentAnalysis: z.object({
-    salesAgentStrengths: z.array(z.string()),
-    salesAgentWeaknesses: z.array(z.string()),
-    customerAgentStrengths: z.array(z.string()),
-    customerAgentWeaknesses: z.array(z.string())
+  agentEvaluation: z.object({
+    ...SalesAgentEvaluationSchema.shape,
+    ...CustomerAgentEvaluationSchema.shape
   })
 });
 
@@ -372,60 +372,68 @@ describe('Sales Call Simulation', () => {
       console.log("\n\x1b[33m--- Conversation reached maximum turns ---\x1b[0m");
     }
     
-    // // Format conversation for judge evaluation
-    // const conversationText = conversation
-    //   .map(step => `${step.agent === "sales_agent" ? "Sales Agent" : "Customer"}: ${step.message}`)
-    //   .join("\n\n");
+    // Format conversation for judge evaluation
+    const conversationText = conversation
+      .map(step => `${step.agent === "sales_agent" ? "Sales Agent" : "Customer"}: ${step.message}`)
+      .join("\n\n");
     
-    // // Generate judge evaluation
-    // const evaluationPrompt = dedent`
-    //   You are an expert conversation analyst tasked with evaluating a simulated conversation between a sales agent and a potential customer.
+    // Generate judge evaluation
+    const evaluationPrompt = dedent`
+      You are an expert conversation analyst tasked with evaluating a simulated conversation between a sales agent and a potential customer.
       
-    //   Here is the conversation:
-    //   ${conversationText}
+      Here is the conversation:
+      ${conversationText}
       
-    //   Your goal is to evaluate this conversation and provide detailed scoring and feedback.
+      Your goal is to evaluate this conversation and provide a boolean assessment for both the sales agent and customer agent.
       
-    //   Score the conversation on these metrics (0-25 points each):
-    //   1. Conversation Naturalness: How realistic and natural is the flow?
-    //   2. Information Exchange: How effectively do agents share and request relevant information?
-    //   3. Goal Progress: How much progress is made toward the sales agent's goal of moving toward a demo/meeting?
-    //   4. Technique Demonstration: How well does the sales agent demonstrate effective techniques, and how realistically does the customer respond?
+      For the sales agent, evaluate:
+      1. Did they effectively introduce themselves and Truss Payments?
+      2. Did they attempt to identify the customer's payment challenges?
+      3. Did they present the solution clearly?
+      4. Did they emphasize key benefits relevant to the customer?
+      5. Did they handle objections professionally?
       
-    //   In your feedback, provide:
-    //   1. A summary of the overall conversation quality
-    //   2. Specific strengths and weaknesses for each agent
-    //   3. Examples from the conversation that illustrate your points
-    //   4. Areas where the conversation could be improved
-    // `;
+      For the customer agent, evaluate:
+      1. Did they maintain their established character traits (resistant to change, values relationships, etc.)?
+      2. Did they communicate in a direct, sometimes blunt style?
+      3. Did they question the benefits of changing their established processes?
+      4. Did they respond realistically to the sales pitch?
+      
+      Provide a boolean value (true for pass, false for fail) for each agent, along with brief feedback explaining your decision.
+    `;
     
-    // console.log('\n📝 Judge Evaluation Prompt:');
-    // console.log(evaluationPrompt);
+    console.log('\n📝 Judge Evaluation Prompt:');
+    console.log("\x1b[35m" + evaluationPrompt + "\x1b[0m"); // Purple color for judge prompt
     
-    // const evaluation = await generateObject({
-    //   model: judgeModel,
-    //   prompt: evaluationPrompt,
-    //   schema: JudgeEvaluationSchema
-    // });
+    const evaluation = await generateObject({
+      model: judgeModel,
+      prompt: evaluationPrompt,
+      schema: JudgeEvaluationSchema
+    });
     
-    // console.log('\n🤖 Judge Evaluation Result:');
-    // console.log(JSON.stringify(evaluation.object, null, 2));
+    console.log('\n🤖 Judge Evaluation Result:');
+    console.log("\x1b[35m" + JSON.stringify(evaluation.object, null, 2) + "\x1b[0m"); // Purple color for judge result
     
     
-    // // Check if expectations are met
-    // const finalScore = evaluation.object.overallScore;
-    // const conversationNaturalness = evaluation.object.metrics.conversationNaturalness;
-    // const informationExchange = evaluation.object.metrics.informationExchange;
-    // const goalProgress = evaluation.object.metrics.goalProgress;
-    // const techniqueDemonstration = evaluation.object.metrics.techniqueDemonstration;
+    // Check if expectations are met
+    const salesAgentResult = evaluation.object.agentEvaluation.salesAgent;
+    const customerAgentResult = evaluation.object.agentEvaluation.customerAgent;
     
-    // // Set expectations based on YAML configuration
-    // expect(finalScore).toBeGreaterThanOrEqual(70);
-    // expect(conversationNaturalness).toBeGreaterThanOrEqual(17);
-    // expect(informationExchange).toBeGreaterThanOrEqual(18);
-    // expect(goalProgress).toBeGreaterThanOrEqual(18);
-    // expect(techniqueDemonstration).toBeGreaterThanOrEqual(17);
+    // Both agents need to pass for the test to pass
+    const testPassed = salesAgentResult && customerAgentResult;
     
-    // console.log(`\n📈 Final Verdict: ${finalScore >= 70 ? '✅ PASSED' : '❌ FAILED'}`);
+    console.log(`\n📈 Final Verdict: ${testPassed ? '✅ PASSED' : '❌ FAILED'}`);
+    console.log(`Sales Agent: ${salesAgentResult ? '✅ PASSED' : '❌ FAILED'}`);
+    console.log(`Customer Agent: ${customerAgentResult ? '✅ PASSED' : '❌ FAILED'}`);
+    if (evaluation.object.agentEvaluation.salesAgentFeedback) {
+      console.log(`\nSales Agent Feedback: \x1b[35m${evaluation.object.agentEvaluation.salesAgentFeedback}\x1b[0m`); // Purple color for feedback
+    }
+    if (evaluation.object.agentEvaluation.customerAgentFeedback) {
+      console.log(`\nCustomer Agent Feedback: \x1b[35m${evaluation.object.agentEvaluation.customerAgentFeedback}\x1b[0m`); // Purple color for feedback
+    }
+
+      // Set expectations based on YAML configuration
+      expect(salesAgentResult).toBe(true);
+      expect(customerAgentResult).toBe(true);
   });
 });
