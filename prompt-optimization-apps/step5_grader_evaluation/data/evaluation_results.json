@@ -1,0 +1,172 @@
+{
+  "timestamp": "2023-06-20T15:45:00Z",
+  "total_conversations": 10,
+  "accuracy": {
+    "overall": 0.85,
+    "sales_agent_rating": 0.90,
+    "customer_agent_rating": 0.80,
+    "overall_rating": 0.85
+  },
+  "confusion_matrices": {
+    "sales_agent_rating": {
+      "true_pass_predicted_pass": 6,
+      "true_pass_predicted_fail": 0,
+      "true_fail_predicted_pass": 1,
+      "true_fail_predicted_fail": 3
+    },
+    "customer_agent_rating": {
+      "true_pass_predicted_pass": 5,
+      "true_pass_predicted_fail": 1,
+      "true_fail_predicted_pass": 1,
+      "true_fail_predicted_fail": 3
+    },
+    "overall_rating": {
+      "true_pass_predicted_pass": 5,
+      "true_pass_predicted_fail": 1,
+      "true_fail_predicted_pass": 0,
+      "true_fail_predicted_fail": 4
+    }
+  },
+  "detailed_results": [
+    {
+      "conversation_id": "labeled_conv_001",
+      "human_labels": {
+        "sales_agent_rating": "pass",
+        "customer_agent_rating": "pass",
+        "overall_rating": "pass"
+      },
+      "ai_labels": {
+        "sales_agent_rating": "pass",
+        "customer_agent_rating": "pass",
+        "overall_rating": "pass"
+      },
+      "correct": true
+    },
+    {
+      "conversation_id": "labeled_conv_002",
+      "human_labels": {
+        "sales_agent_rating": "pass",
+        "customer_agent_rating": "pass",
+        "overall_rating": "pass"
+      },
+      "ai_labels": {
+        "sales_agent_rating": "pass",
+        "customer_agent_rating": "pass",
+        "overall_rating": "pass"
+      },
+      "correct": true
+    },
+    {
+      "conversation_id": "labeled_conv_003",
+      "human_labels": {
+        "sales_agent_rating": "fail",
+        "customer_agent_rating": "pass",
+        "overall_rating": "fail"
+      },
+      "ai_labels": {
+        "sales_agent_rating": "fail",
+        "customer_agent_rating": "pass",
+        "overall_rating": "fail"
+      },
+      "correct": true
+    },
+    {
+      "conversation_id": "labeled_conv_004",
+      "human_labels": {
+        "sales_agent_rating": "fail",
+        "customer_agent_rating": "fail",
+        "overall_rating": "fail"
+      },
+      "ai_labels": {
+        "sales_agent_rating": "fail",
+        "customer_agent_rating": "fail",
+        "overall_rating": "fail"
+      },
+      "correct": true
+    },
+    {
+      "conversation_id": "labeled_conv_005",
+      "human_labels": {
+        "sales_agent_rating": "pass",
+        "customer_agent_rating": "pass",
+        "overall_rating": "pass"
+      },
+      "ai_labels": {
+        "sales_agent_rating": "pass",
+        "customer_agent_rating": "fail",
+        "overall_rating": "pass"
+      },
+      "correct": false
+    },
+    {
+      "conversation_id": "labeled_conv_006",
+      "human_labels": {
+        "sales_agent_rating": "pass",
+        "customer_agent_rating": "pass",
+        "overall_rating": "pass"
+      },
+      "ai_labels": {
+        "sales_agent_rating": "pass",
+        "customer_agent_rating": "pass",
+        "overall_rating": "pass"
+      },
+      "correct": true
+    },
+    {
+      "conversation_id": "labeled_conv_007",
+      "human_labels": {
+        "sales_agent_rating": "fail",
+        "customer_agent_rating": "fail",
+        "overall_rating": "fail"
+      },
+      "ai_labels": {
+        "sales_agent_rating": "pass",
+        "customer_agent_rating": "fail",
+        "overall_rating": "fail"
+      },
+      "correct": false
+    },
+    {
+      "conversation_id": "labeled_conv_008",
+      "human_labels": {
+        "sales_agent_rating": "pass",
+        "customer_agent_rating": "fail",
+        "overall_rating": "fail"
+      },
+      "ai_labels": {
+        "sales_agent_rating": "pass",
+        "customer_agent_rating": "fail",
+        "overall_rating": "fail"
+      },
+      "correct": true
+    },
+    {
+      "conversation_id": "labeled_conv_009",
+      "human_labels": {
+        "sales_agent_rating": "pass",
+        "customer_agent_rating": "pass",
+        "overall_rating": "pass"
+      },
+      "ai_labels": {
+        "sales_agent_rating": "pass",
+        "customer_agent_rating": "pass",
+        "overall_rating": "fail"
+      },
+      "correct": false
+    },
+    {
+      "conversation_id": "labeled_conv_010",
+      "human_labels": {
+        "sales_agent_rating": "fail",
+        "customer_agent_rating": "fail",
+        "overall_rating": "fail"
+      },
+      "ai_labels": {
+        "sales_agent_rating": "fail",
+        "customer_agent_rating": "pass",
+        "overall_rating": "fail"
+      },
+      "correct": false
+    }
+  ]
+} 
