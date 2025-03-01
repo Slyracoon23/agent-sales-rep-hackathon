@@ -5,6 +5,7 @@ import { codeBlock } from "common-tags";
 import { createVitest } from "vitest/node";
 import { z } from "zod";
 
+// Module augmentation for Vitest
 declare module "vitest" {
   interface ProvidedContext {
     systemMessage: string;
@@ -26,16 +27,42 @@ export async function runAgentTests(testFiles: string[]) {
   const iterationSummary: Array<{
     iteration: number;
     passRate: number;
-    systemMessage: string;
+    salesAgentSystemPrompt?: string;
+    customerAgentSystemPrompt?: string;
+    supportAgentSystemPrompt?: string;
   }> = [];
 
-  let currentSystemMessage = codeBlock`
-    You are a very good AI assistant specialized in product management...
+  // Initial system prompts
+  let salesAgentSystemPrompt = codeBlock`
+    You are a sales representative for Truss Payments, a payment processing company. Your goal is to:
+    1. Introduce yourself and your company
+    2. Identify the customer's needs and pain points
+    3. Present relevant solutions and pricing
+    4. Address objections professionally
+    5. Move the conversation toward a demo or follow-up meeting
+    
+    Be persistent but not pushy. Listen to the customer's concerns and tailor your approach accordingly.
+  `;
+  
+  let customerAgentSystemPrompt = codeBlock`
+    You are a small business owner who is currently using PayPal for payment processing. You have the following characteristics:
+    1. Initially skeptical of changing providers
+    2. Concerned about transaction fees (currently paying 3.5%)
+    3. Had a negative experience with a previous sales call
+    4. Process about 250 transactions per month
+    5. Would be interested if there's a significant cost saving (>1%)
+    
+    Start somewhat dismissive but become more engaged if the sales rep addresses your concerns effectively.
+  `;
+  
+  let supportAgentSystemPrompt = codeBlock`
+    You are a customer support representative for Truss Payments. Handle this customer complaint professionally and resolve their issue.
   `;
 
   let iteration = 0;
 
-  let finalTestResults: typeof testResults | null = null;
+  // Using a more generic type
+  let finalTestResults: any[] | null = null;
 
   while (iteration < MAX_ITERATIONS) {
     console.log(`\nIteration ${iteration + 1}:`);
@@ -46,8 +73,11 @@ export async function runAgentTests(testFiles: string[]) {
       include: testFiles,
     });
 
-    // Provide the current system message
-    vitest.provide("systemMessage", currentSystemMessage);
+    // Provide the current system prompts
+    vitest.provide("systemMessage", "You are a helpful assistant.");
+    // vitest.provide("salesAgentSystemPrompt", salesAgentSystemPrompt);
+    // vitest.provide("customerAgentSystemPrompt", customerAgentSystemPrompt);
+    // vitest.provide("supportAgentSystemPrompt", supportAgentSystemPrompt);
 
     // Run the tests
     await vitest.start();
@@ -65,7 +95,9 @@ export async function runAgentTests(testFiles: string[]) {
     iterationSummary.push({
       iteration: iteration + 1,
       passRate,
-      systemMessage: currentSystemMessage,
+      salesAgentSystemPrompt,
+      customerAgentSystemPrompt,
+      supportAgentSystemPrompt,
     });
 
     // Store the test results from the final iteration
@@ -78,18 +110,39 @@ export async function runAgentTests(testFiles: string[]) {
       break;
     }
 
-    // Generate improved system message
-    const prompt = `Current system message: ${currentSystemMessage}\n\nTest results: ${inspect(
-      testResults,
-      { depth: null },
-    )}\n\nPlease analyze the test results and provide an improved system message with explanation.`;
+    // Generate improved system prompts
+    const prompt = `
+Current prompts:
+
+SALES AGENT:
+${salesAgentSystemPrompt}
+
+CUSTOMER AGENT:
+${customerAgentSystemPrompt}
+
+SUPPORT AGENT:
+${supportAgentSystemPrompt}
+
+Test results: ${inspect(testResults, { depth: null })}
+
+Please analyze the test results and provide improved system prompts for the agents.
+The sales agent should be more persuasive and address customer objections better.
+The customer agent should be realistic in responses.
+The support agent should be more empathetic and solutions-oriented.
+`;
 
     const { object } = await generateObject({
       model: openai("gpt-4o", { structuredOutputs: true }),
       schema: z.object({
-        improvedSystemMessage: z
+        salesAgentSystemPrompt: z
           .string()
-          .describe("The improved system message based on test results"),
+          .describe("The improved sales agent system prompt based on test results"),
+        customerAgentSystemPrompt: z
+          .string()
+          .describe("The improved customer agent system prompt based on test results"),
+        supportAgentSystemPrompt: z
+          .string()
+          .describe("The improved support agent system prompt based on test results"),
         analysis: z.string().describe("Analysis of what was improved and why"),
       }),
       system:
@@ -97,8 +150,13 @@ export async function runAgentTests(testFiles: string[]) {
       prompt,
     });
 
-    // Update the system message for the next iteration
-    currentSystemMessage = object.improvedSystemMessage;
+    // Update the system prompts for the next iteration
+    salesAgentSystemPrompt = object.salesAgentSystemPrompt;
+    customerAgentSystemPrompt = object.customerAgentSystemPrompt;
+    supportAgentSystemPrompt = object.supportAgentSystemPrompt;
+
+    console.log("\nANALYSIS:");
+    console.log(object.analysis);
 
     // Clean up the current Vitest instance
     await vitest.close();
@@ -107,29 +165,36 @@ export async function runAgentTests(testFiles: string[]) {
   }
 
   return {
-    finalSystemMessage: currentSystemMessage,
+    finalSalesAgentSystemPrompt: salesAgentSystemPrompt,
+    finalCustomerAgentSystemPrompt: customerAgentSystemPrompt,
+    finalSupportAgentSystemPrompt: supportAgentSystemPrompt,
     iterations: iteration,
     summary: iterationSummary,
     finalResults: finalTestResults,
   };
 }
 
-// Get test files from command line arguments
-const testFiles = process.argv.slice(2);
-
-if (testFiles.length === 0) {
-  console.error("Please provide at least one test file path as an argument.");
-  console.error(
-    "Example: pnpm loop-agent src/benchmarks/copilot/daily_task_prioritization/identify-top-priority-tasks.test.ts",
-  );
-  process.exit(1);
-}
+// Hardcode the test file to sales-rep.test.ts instead of using command line arguments
+const testFiles = ["sales-rep.test.ts"];
 
 console.log("Running tests for files:", testFiles);
 
 runAgentTests(testFiles)
   .then((results) => {
-    console.log(inspect(results, { depth: null, colors: true }));
+    console.log("\n===== OPTIMIZATION RESULTS =====");
+    console.log(`Total iterations: ${results.iterations}`);
+    console.log("\nFinal Sales Agent System Prompt:");
+    console.log(results.finalSalesAgentSystemPrompt);
+    console.log("\nFinal Customer Agent System Prompt:");
+    console.log(results.finalCustomerAgentSystemPrompt);
+    console.log("\nFinal Support Agent System Prompt:");
+    console.log(results.finalSupportAgentSystemPrompt);
+    
+    console.log("\nIteration Summary:");
+    results.summary.forEach(iteration => {
+      console.log(`Iteration ${iteration.iteration}: ${iteration.passRate.toFixed(2)}%`);
+    });
+    
     process.exit(0);
   })
   .catch((error) => {

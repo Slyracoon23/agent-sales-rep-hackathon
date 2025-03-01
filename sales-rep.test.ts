@@ -36,14 +36,14 @@ type ConversationStep = {
   message: string;
 };
 
-declare module "vitest" {
-  interface ProvidedContext {
-    systemMessage: string;
-    salesAgentSystemPrompt: string;
-    customerAgentSystemPrompt: string;
-    supportAgentSystemPrompt: string;
-  }
-}
+// declare module "vitest" {
+//   interface ProvidedContext {
+//     systemMessage: string;
+//     salesAgentSystemPrompt: string;
+//     customerAgentSystemPrompt: string;
+//     supportAgentSystemPrompt: string;
+//   }
+// }
 
 describe('Sales Call Simulation', () => {
   // Initial system prompts from the YAML
