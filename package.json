@@ -13,6 +13,7 @@
   "packageManager": "pnpm@10.4.1",
   "dependencies": {
     "@ai-sdk/openai": "^1.1.15",
+    "@datastax/astra-db-ts": "^1.5.0",
     "ai": "^4.1.46",
     "common-tags": "^1.8.2",
     "dedent": "^1.5.3",
