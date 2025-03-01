@@ -6,6 +6,8 @@ import { openai } from '@ai-sdk/openai';
 import { generateText, generateObject } from 'ai';
 // Import the conversation data
 import { fullConversation, getInitialConversation, getConversationFromIndex, conversationStartPoint, ConversationStep } from './test/data/sales-conversation';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Ensure API key is available
 if (!process.env.OPENAI_API_KEY) {
@@ -44,6 +46,82 @@ declare module "vitest" {
     salesAgentSystemPrompt: string;
     customerAgentSystemPrompt: string;
   }
+}
+
+// Helper functions for reporting
+const testResultsDir = path.join(process.cwd(), 'test-results');
+
+// Ensure the directory exists
+if (!fs.existsSync(testResultsDir)) {
+  fs.mkdirSync(testResultsDir, { recursive: true });
+}
+
+// Function to save detailed test results
+function saveDetailedResults(conversationData, simulationResults, testStartTime) {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  
+  // Calculate summary statistics
+  const totalSimulations = simulationResults.length;
+  const passedSimulations = simulationResults.filter(result => result.overallPassed).length;
+  const passRate = totalSimulations > 0 ? (passedSimulations / totalSimulations) * 100 : 0;
+  
+  // Create detailed results object
+  const detailedResults = {
+    summary: {
+      totalSimulations,
+      passedSimulations,
+      passRate: `${passRate.toFixed(2)}%`,
+      timestamp: new Date().toISOString(),
+      duration: (Date.now() - testStartTime) / 1000,
+      testRunDate: new Date().toLocaleDateString(),
+      testRunTime: new Date().toLocaleTimeString()
+    },
+    simulations: {}
+  };
+  
+  // Process each simulation to create a cleaner output
+  conversationData.forEach(simulation => {
+    detailedResults.simulations[simulation.simulationNumber] = {
+      id: simulation.simulationNumber,
+      startIndex: simulation.startIndex,
+      passed: simulation.evaluation.overallPassed,
+      salesAgentPassed: simulation.evaluation.salesAgentPassed,
+      customerAgentPassed: simulation.evaluation.customerAgentPassed,
+      salesAgentFeedback: simulation.evaluation.salesAgentFeedback || '',
+      customerAgentFeedback: simulation.evaluation.customerAgentFeedback || '',
+      conversation: simulation.conversation
+    };
+  });
+  
+  // Save detailed results
+  const detailedResultsPath = path.join(testResultsDir, `sales-simulation-results-${timestamp}.json`);
+  fs.writeFileSync(detailedResultsPath, JSON.stringify(detailedResults, null, 2));
+  console.log(`\n📄 Detailed simulation results saved to: ${detailedResultsPath}`);
+  
+  // Save conversation data
+  const conversationDataPath = path.join(testResultsDir, 'conversation-data.json');
+  fs.writeFileSync(conversationDataPath, JSON.stringify(conversationData, null, 2));
+  console.log(`📄 Conversation data saved to: ${conversationDataPath}`);
+  
+  // Save summary results
+  const summaryResultsPath = path.join(testResultsDir, 'latest-simulation-summary.json');
+  fs.writeFileSync(summaryResultsPath, JSON.stringify(detailedResults.summary, null, 2));
+  console.log(`📄 Summary saved to: ${summaryResultsPath}`);
+  
+  // Save simulation results
+  const simulationResultsPath = path.join(testResultsDir, 'simulation-results.json');
+  fs.writeFileSync(
+    simulationResultsPath,
+    JSON.stringify({
+      totalSimulations,
+      passedSimulations,
+      passRate: `${passRate.toFixed(2)}%`,
+      results: simulationResults
+    }, null, 2)
+  );
+  console.log(`📄 Simulation results saved to: ${simulationResultsPath}`);
+  
+  return detailedResults;
 }
 
 describe('Sales Call Simulation', () => {
@@ -312,6 +390,12 @@ describe('Sales Call Simulation', () => {
 
   // Array to store results from all simulations
   const simulationResults = [];
+  // Array to store detailed conversation data
+  const conversationData = [];
+  // Track test start time
+  const testStartTime = Date.now();
+
+  console.log('\n🔍 Sales Call Simulation Test Starting...\n');
 
   // Run tests for each simulation using forEach
   simulations.forEach(simulation => {
@@ -438,7 +522,17 @@ describe('Sales Call Simulation', () => {
       console.log(`Starting Index: ${conversationStartIndex}`);
       console.log(`Sales Agent: ${salesAgentResult ? '✅ PASSED' : '❌ FAILED'}`);
       console.log(`Customer Agent: ${customerAgentResult ? '✅ PASSED' : '❌ FAILED'}`);
+      
+      // Calculate simulation duration
+      const simulationDuration = Date.now() - simulationStartTime;
+      console.log(`Simulation Duration: ${(simulationDuration / 1000).toFixed(2)}s`);
             
+      // Store the conversation for later saving
+      const conversationForSaving = conversation.map(step => ({
+        agent: step.agent === "sales_agent" ? "Sales Agent" : "Customer",
+        message: step.message
+      }));
+      
       // Store the results for summary analysis
       simulationResults.push({
         simulationNumber: simulation.id,
@@ -446,8 +540,24 @@ describe('Sales Call Simulation', () => {
         salesAgentPassed: salesAgentResult,
         customerAgentPassed: customerAgentResult,
         overallPassed: testPassed,
+        duration: simulationDuration,
         salesAgentFeedback: evaluation.object.agentEvaluation.salesAgentFeedback,
         customerAgentFeedback: evaluation.object.agentEvaluation.customerAgentFeedback
+      });
+
+      // Store detailed conversation data
+      conversationData.push({
+        simulationNumber: simulation.id,
+        startIndex: conversationStartIndex,
+        duration: simulationDuration,
+        conversation: conversationForSaving,
+        evaluation: {
+          salesAgentPassed: salesAgentResult,
+          customerAgentPassed: customerAgentResult,
+          overallPassed: testPassed,
+          salesAgentFeedback: evaluation.object.agentEvaluation.salesAgentFeedback,
+          customerAgentFeedback: evaluation.object.agentEvaluation.customerAgentFeedback
+        }
       });
 
       // Set expectations based on YAML configuration
@@ -462,7 +572,8 @@ describe('Sales Call Simulation', () => {
     console.log(`Total Simulations: ${numberOfSimulations}`);
     
     const passedSimulations = simulationResults.filter(result => result.overallPassed).length;
-    console.log(`Passed Simulations: ${passedSimulations} (${(passedSimulations/numberOfSimulations*100).toFixed(2)}%)`);
+    const passRate = (passedSimulations/numberOfSimulations*100).toFixed(2);
+    console.log(`Passed Simulations: ${passedSimulations} (${passRate}%)`);
     
     // Output detailed results
     console.log('\nDetailed Results:');
@@ -471,9 +582,18 @@ describe('Sales Call Simulation', () => {
       console.log(`  Overall: ${result.overallPassed ? '✅ PASSED' : '❌ FAILED'}`);
       console.log(`  Sales Agent: ${result.salesAgentPassed ? '✅ PASSED' : '❌ FAILED'}`);
       console.log(`  Customer Agent: ${result.customerAgentPassed ? '✅ PASSED' : '❌ FAILED'}`);
+      console.log(`  Duration: ${(result.duration / 1000).toFixed(2)}s`);
       console.log(`  Sales Agent Feedback: ${result.salesAgentFeedback || 'No feedback provided'}`);
       console.log(`  Customer Agent Feedback: ${result.customerAgentFeedback || 'No feedback provided'}`);
     });
+    
+    // Save all results to files
+    const detailedResults = saveDetailedResults(conversationData, simulationResults, testStartTime);
+    
+    // Calculate total test duration
+    const totalDuration = (Date.now() - testStartTime) / 1000;
+    console.log(`\n⏱️ Total Test Duration: ${totalDuration.toFixed(2)}s`);
+    console.log(`\n📊 Final Result: ${passedSimulations}/${numberOfSimulations} simulations passed (${passRate}%)`);
     
     // This test is just for reporting, always passes
     expect(true).toBe(true);

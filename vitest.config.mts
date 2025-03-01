@@ -1,6 +1,5 @@
 // vitest.config.ts
 import { defineConfig } from 'vitest/config';
-import DetailedReporter from './reporters/DetailedReporter.mts';
 
 export default defineConfig({
   test: {
@@ -11,6 +10,6 @@ export default defineConfig({
     outputFile: {
       json: './test-results/vitest-results.json'
     },
-    reporters: ['default', 'json', new DetailedReporter()]
+    reporters: ['default', 'json']
   }
 });

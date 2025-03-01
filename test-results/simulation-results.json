@@ -1,0 +1,37 @@
+{
+  "totalSimulations": 3,
+  "passedSimulations": 3,
+  "passRate": "100.00%",
+  "results": [
+    {
+      "simulationNumber": 1,
+      "startIndex": 6,
+      "salesAgentPassed": true,
+      "customerAgentPassed": true,
+      "overallPassed": true,
+      "duration": 16648,
+      "salesAgentFeedback": "The sales agent effectively introduced themselves and Truss Payments, attempted to identify the customer's payment challenges, presented the solution clearly, emphasized key benefits relevant to the customer, and handled objections professionally.",
+      "customerAgentFeedback": "The customer agent maintained their established character traits of being resistant to change and valuing relationships, communicated in a direct and sometimes blunt style, questioned the benefits of changing their established processes, and responded realistically to the sales pitch."
+    },
+    {
+      "simulationNumber": 2,
+      "startIndex": 175,
+      "salesAgentPassed": true,
+      "customerAgentPassed": true,
+      "overallPassed": true,
+      "duration": 6378,
+      "salesAgentFeedback": "The sales agent effectively introduced themselves and Trust Payments, attempted to identify the customer's payment challenges, presented the solution clearly, emphasized key benefits, and handled objections professionally. They maintained a respectful and understanding tone throughout the conversation, even when the customer was resistant.",
+      "customerAgentFeedback": "The customer agent maintained their character traits of being resistant to change and valuing relationships. They communicated in a direct and sometimes blunt style, questioned the benefits of changing their established processes, and responded realistically to the sales pitch. Their responses were consistent with someone who is satisfied with their current system and skeptical of new solutions."
+    },
+    {
+      "simulationNumber": 3,
+      "startIndex": 138,
+      "salesAgentPassed": true,
+      "customerAgentPassed": true,
+      "overallPassed": true,
+      "duration": 8435,
+      "salesAgentFeedback": "The sales agent effectively introduced themselves and Truss Payments, attempted to identify the customer's payment challenges, presented the solution clearly, emphasized key benefits, and handled objections professionally. They maintained a respectful and understanding tone throughout the conversation.",
+      "customerAgentFeedback": "The customer agent maintained their character traits of being resistant to change and valuing relationships. They communicated in a direct and sometimes blunt style, questioned the benefits of changing their established processes, and responded realistically to the sales pitch. Their responses were consistent with their established persona."
+    }
+  ]
+}
