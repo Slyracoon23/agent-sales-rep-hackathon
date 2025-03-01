@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { describe, it, expect, inject } from 'vitest';
 import dedent from 'dedent';
 import { openai } from '@ai-sdk/openai';
-import { generateText, generateObject, generateChatCompletion } from 'ai';
+import { generateText, generateObject } from 'ai';
 
 // Ensure API key is available
 if (!process.env.OPENAI_API_KEY) {
@@ -35,6 +35,15 @@ type ConversationStep = {
   agent: string;
   message: string;
 };
+
+declare module "vitest" {
+  interface ProvidedContext {
+    systemMessage: string;
+    salesAgentSystemPrompt: string;
+    customerAgentSystemPrompt: string;
+    supportAgentSystemPrompt: string;
+  }
+}
 
 describe('Sales Call Simulation', () => {
   // Initial system prompts from the YAML
@@ -101,26 +110,25 @@ describe('Sales Call Simulation', () => {
       const model = agentTurn === "sales_agent" ? salesAgentModel : customerAgentModel;
       const systemPrompt = agentTurn === "sales_agent" ? salesAgentSystemPrompt : customerAgentSystemPrompt;
       
-      // Build the context from previous conversation
-      const context = conversation.map(step => ({
-        role: step.agent === agentTurn ? "assistant" : "user",
-        content: step.message
-      }));
-      
       // Generate the next message
-      const result = await generateChatCompletion({
+      const result = await generateText({
         model,
-        system: systemPrompt,
-        messages: context
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...conversation.map(step => ({
+            role: step.agent === agentTurn ? "assistant" as const : "user" as const,
+            content: step.message
+          }))
+        ]
       });
       
       // Add to conversation
       conversation.push({
         agent: agentTurn,
-        message: result.content
+        message: result.text
       });
 
-      console.log(`\n${agentTurn}: ${result.content}`);
+      console.log(`\n${agentTurn}: ${result.text}`);
     }
     
     // Format conversation for judge evaluation
@@ -163,13 +171,13 @@ describe('Sales Call Simulation', () => {
     console.log(JSON.stringify(evaluation.object, null, 2));
     
     // Store the simulation results
-    if (typeof __vitest_meta__ !== 'undefined') {
-      // @ts-expect-error - Custom Vitest API
-      __vitest_meta__.simulationResults = {
-        conversation,
-        evaluation: evaluation.object
-      };
-    }
+    // if (typeof __vitest_meta__ !== 'undefined') {
+    //   // @ts-expect-error - Custom Vitest API
+    //   __vitest_meta__.simulationResults = {
+    //     conversation,
+    //     evaluation: evaluation.object
+    //   };
+    // }
     
     // Check if expectations are met
     const finalScore = evaluation.object.overallScore;
@@ -240,26 +248,25 @@ describe('Customer Support Simulation', () => {
       const model = agentTurn === "support_agent" ? supportAgentModel : customerAgentModel;
       const systemPrompt = agentTurn === "support_agent" ? supportAgentSystemPrompt : customerAgentSystemPrompt;
       
-      // Build the context from previous conversation
-      const context = conversation.map(step => ({
-        role: step.agent === agentTurn ? "assistant" : "user",
-        content: step.message
-      }));
-      
       // Generate the next message
-      const result = await generateChatCompletion({
+      const result = await generateText({
         model,
-        system: systemPrompt,
-        messages: context
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...conversation.map(step => ({
+            role: step.agent === agentTurn ? "assistant" as const : "user" as const,
+            content: step.message
+          }))
+        ]
       });
       
       // Add to conversation
       conversation.push({
         agent: agentTurn,
-        message: result.content
+        message: result.text
       });
 
-      console.log(`\n${agentTurn}: ${result.content}`);
+      console.log(`\n${agentTurn}: ${result.text}`);
     }
     
     // Format conversation for judge evaluation
@@ -302,13 +309,13 @@ describe('Customer Support Simulation', () => {
     console.log(JSON.stringify(evaluation.object, null, 2));
     
     // Store results for analysis
-    if (typeof __vitest_meta__ !== 'undefined') {
-      // @ts-expect-error - Custom Vitest API
-      __vitest_meta__.supportSimulationResults = {
-        conversation,
-        evaluation: evaluation.object
-      };
-    }
+    // if (typeof __vitest_meta__ !== 'undefined') {
+    //   // @ts-expect-error - Custom Vitest API
+    //   __vitest_meta__.supportSimulationResults = {
+    //     conversation,
+    //     evaluation: evaluation.object
+    //   };
+    // }
     
     // Check if expectations are met
     const finalScore = evaluation.object.overallScore;

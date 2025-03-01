@@ -35,7 +35,7 @@ export async function runAgentTests(testFiles: string[]) {
 
   let iteration = 0;
 
-  let finalTestResults = null;
+  let finalTestResults: typeof testResults | null = null;
 
   while (iteration < MAX_ITERATIONS) {
     console.log(`\nIteration ${iteration + 1}:`);
