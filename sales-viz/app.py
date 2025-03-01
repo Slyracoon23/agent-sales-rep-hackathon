@@ -634,15 +634,71 @@ def submit_feedback(n_clicks, simulation_id, sales_assessment, sales_feedback,
     if stored_feedback is None:
         stored_feedback = {}
     
-    # Create feedback entry
+    # Get the full conversation data
+    conversation = data_loader.get_conversation_by_simulation_id(simulation_id)
+    
+    # Get the grader results
+    sim_results = data_loader.get_simulation_results_df()
+    grader_results = {}
+    
+    if not sim_results.empty:
+        sim_row = sim_results[sim_results['simulationNumber'] == simulation_id]
+        if not sim_row.empty:
+            row = sim_row.iloc[0]
+            grader_results = {
+                'salesAgentPassed': bool(row.get('salesAgentPassed', False)),
+                'customerAgentPassed': bool(row.get('customerAgentPassed', False)),
+                'overallPassed': bool(row.get('overallPassed', False)),
+                'salesAgentFeedback': row.get('salesAgentFeedback', ''),
+                'customerAgentFeedback': row.get('customerAgentFeedback', ''),
+                'duration': float(row.get('duration', 0))/1000
+            }
+    
+    # Format the conversation for the grader prompt
+    conversation_text = ""
+    for i, msg in enumerate(conversation):
+        conversation_text += f"{msg['agent']}: {msg['message']}\n\n"
+    
+    # Create the grader prompt
+    grader_prompt = f"""
+    You are an expert conversation analyst tasked with evaluating a simulated conversation between a sales agent and a potential customer.
+    
+    Here is the conversation:
+    {conversation_text}
+    
+    Your goal is to evaluate this conversation and provide a boolean assessment for both the sales agent and customer agent.
+    
+    For the sales agent, evaluate:
+    1. Did they effectively introduce themselves and Truss Payments?
+    2. Did they attempt to identify the customer's payment challenges?
+    3. Did they present the solution clearly?
+    4. Did they emphasize key benefits relevant to the customer?
+    5. Did they handle objections professionally?
+    
+    For the customer agent, evaluate:
+    1. Did they maintain their established character traits (resistant to change, values relationships, etc.)?
+    2. Did they communicate in a direct, sometimes blunt style?
+    3. Did they question the benefits of changing their established processes?
+    4. Did they respond realistically to the sales pitch?
+    
+    Provide a boolean value (true for pass, false for fail) for each agent, along with brief feedback explaining your decision.
+    """
+    
+    # Create comprehensive feedback entry
     feedback_entry = {
         'timestamp': datetime.now().isoformat(),
-        'sales_assessment': sales_assessment,
-        'sales_feedback': sales_feedback,
-        'customer_assessment': customer_assessment,
-        'customer_feedback': customer_feedback,
-        'overall_assessment': overall_assessment,
-        'overall_feedback': overall_feedback
+        'simulation_id': simulation_id,
+        'conversation': conversation,
+        'grader_prompt': grader_prompt,
+        'grader_results': grader_results,
+        'user_feedback': {
+            'sales_assessment': sales_assessment,
+            'sales_feedback': sales_feedback,
+            'customer_assessment': customer_assessment,
+            'customer_feedback': customer_feedback,
+            'overall_assessment': overall_assessment,
+            'overall_feedback': overall_feedback
+        }
     }
     
     # Store feedback by simulation ID
@@ -672,6 +728,7 @@ def update_feedback_summary(stored_feedback, simulation_id):
         return html.P("No feedback has been submitted for this conversation yet.")
     
     feedback = stored_feedback[str(simulation_id)]
+    user_feedback = feedback.get('user_feedback', {})
     
     return html.Div([
         html.H5("Your Assessment", className="mb-3"),
@@ -681,12 +738,12 @@ def update_feedback_summary(stored_feedback, simulation_id):
             dbc.CardHeader([
                 html.Span("Sales Agent", className="font-weight-bold"),
                 html.Span(
-                    " ✅ PASS" if feedback.get('sales_assessment') == 'pass' else " ❌ FAIL", 
-                    className=f"{'text-success' if feedback.get('sales_assessment') == 'pass' else 'text-danger'}"
+                    " ✅ PASS" if user_feedback.get('sales_assessment') == 'pass' else " ❌ FAIL", 
+                    className=f"{'text-success' if user_feedback.get('sales_assessment') == 'pass' else 'text-danger'}"
                 )
             ]),
             dbc.CardBody([
-                html.P(feedback.get('sales_feedback', 'No feedback provided'))
+                html.P(user_feedback.get('sales_feedback', 'No feedback provided'))
             ])
         ], className="mb-3"),
         
@@ -695,12 +752,12 @@ def update_feedback_summary(stored_feedback, simulation_id):
             dbc.CardHeader([
                 html.Span("Customer Agent", className="font-weight-bold"),
                 html.Span(
-                    " ✅ PASS" if feedback.get('customer_assessment') == 'pass' else " ❌ FAIL", 
-                    className=f"{'text-success' if feedback.get('customer_assessment') == 'pass' else 'text-danger'}"
+                    " ✅ PASS" if user_feedback.get('customer_assessment') == 'pass' else " ❌ FAIL", 
+                    className=f"{'text-success' if user_feedback.get('customer_assessment') == 'pass' else 'text-danger'}"
                 )
             ]),
             dbc.CardBody([
-                html.P(feedback.get('customer_feedback', 'No feedback provided'))
+                html.P(user_feedback.get('customer_feedback', 'No feedback provided'))
             ])
         ], className="mb-3"),
         
@@ -709,10 +766,10 @@ def update_feedback_summary(stored_feedback, simulation_id):
             dbc.CardHeader("Overall Assessment"),
             dbc.CardBody([
                 html.H3(
-                    "✅ PASS" if feedback.get('overall_assessment') == 'pass' else "❌ FAIL",
-                    className=f"text-center {'text-success' if feedback.get('overall_assessment') == 'pass' else 'text-danger'}"
+                    "✅ PASS" if user_feedback.get('overall_assessment') == 'pass' else "❌ FAIL",
+                    className=f"text-center {'text-success' if user_feedback.get('overall_assessment') == 'pass' else 'text-danger'}"
                 ),
-                html.P(feedback.get('overall_feedback', 'No overall feedback provided'), className="mt-3")
+                html.P(user_feedback.get('overall_feedback', 'No overall feedback provided'), className="mt-3")
             ])
         ]),
         
