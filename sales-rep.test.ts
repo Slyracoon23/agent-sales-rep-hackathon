@@ -45,6 +45,27 @@ declare module "vitest" {
 }
 
 describe('Sales Call Simulation', () => {
+  // Context fields for additional information
+  const salesAgentContext = `
+    <context>
+      <company_details>
+        <rates>Starting at 2.3% for qualified merchants</rates>
+        <promotion>First month free for new customers</promotion>
+        <integrations>All major e-commerce systems</integrations>
+        <support>24/7 customer support</support>
+      </company_details>
+    </context>
+  `;
+  
+  const customerAgentContext = `
+    <context>
+      <business_type>Online craft supply store</business_type>
+      <current_provider>PayPal for 3 years</current_provider>
+      <pain_point>Lack of responsive customer service</pain_point>
+      <openness>Open to better options but needs convincing</openness>
+    </context>
+  `;
+
   // Initial system prompts from the YAML
   const salesAgentSystemPrompt = inject("salesAgentSystemPrompt") ?? dedent`
     You are a sales representative for Truss Payments, a payment processing company. Your goal is to:
@@ -55,6 +76,10 @@ describe('Sales Call Simulation', () => {
     5. Move the conversation toward a demo or follow-up meeting
     
     Be persistent but not pushy. Listen to the customer's concerns and tailor your approach accordingly.
+
+    <context>
+      ${salesAgentContext}
+    </context>
   `;
   
   const customerAgentSystemPrompt = inject("customerAgentSystemPrompt") ?? dedent`
@@ -66,6 +91,10 @@ describe('Sales Call Simulation', () => {
     5. Would be interested if there's a significant cost saving (>1%)
     
     Start somewhat dismissive but become more engaged if the sales rep addresses your concerns effectively.
+
+    <context>
+      ${customerAgentContext}
+    </context>
   `;
 
   // Models defined in the configuration
