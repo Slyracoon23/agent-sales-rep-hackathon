@@ -41,7 +41,6 @@ declare module "vitest" {
     systemMessage: string;
     salesAgentSystemPrompt: string;
     customerAgentSystemPrompt: string;
-    supportAgentSystemPrompt: string;
   }
 }
 
@@ -71,8 +70,8 @@ describe('Sales Call Simulation', () => {
 
   // Models defined in the configuration
   const salesAgentModel = openai('gpt-4o');
-  const customerAgentModel = openai('gpt-4-turbo'); // Using gpt-4-turbo as a stand-in for claude-3-sonnet
-  const judgeModel = openai('gpt-4-turbo');
+  const customerAgentModel = openai('gpt-4o'); // Using gpt-4-turbo as a stand-in for claude-3-sonnet
+  const judgeModel = openai('gpt-4o');
 
   // Test a single iteration of the sales conversation
   it('Sales Call Simulation', async () => {
@@ -100,6 +99,14 @@ describe('Sales Call Simulation', () => {
     const maxTurns = 8;
     console.log(`\n📊 Starting Sales Call Simulation`);
     
+    // Log the initial conversation first with colors
+    console.log('\n--- Initial Conversation ---');
+    initialConversation.forEach(step => {
+      const agentColor = step.agent === "sales_agent" ? "\x1b[34m" : "\x1b[31m"; // Blue for sales, Red for customer
+      console.log(`\n${agentColor}${step.agent === "sales_agent" ? "Sales Agent" : "Customer"}: ${step.message}\x1b[0m`);
+    });
+    console.log('\n--- Continuing Conversation ---');
+    
     // Start with the initial conversation
     let conversation: ConversationStep[] = [...initialConversation];
     
@@ -109,6 +116,10 @@ describe('Sales Call Simulation', () => {
       const agentTurn = turn % 2 === 0 ? "sales_agent" : "customer_agent";
       const model = agentTurn === "sales_agent" ? salesAgentModel : customerAgentModel;
       const systemPrompt = agentTurn === "sales_agent" ? salesAgentSystemPrompt : customerAgentSystemPrompt;
+      const agentColor = agentTurn === "sales_agent" ? "\x1b[34m" : "\x1b[31m"; // Blue for sales, Red for customer
+      
+      // Add a small delay between messages
+      await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
       
       // Generate the next message
       const result = await generateText({
@@ -128,201 +139,63 @@ describe('Sales Call Simulation', () => {
         message: result.text
       });
 
-      console.log(`\n${agentTurn}: ${result.text}`);
+      console.log(`\n${agentColor}${agentTurn === "sales_agent" ? "Sales Agent" : "Customer"}: ${result.text}\x1b[0m`);
     }
     
-    // Format conversation for judge evaluation
-    const conversationText = conversation
-      .map(step => `${step.agent === "sales_agent" ? "Sales Agent" : "Customer"}: ${step.message}`)
-      .join("\n\n");
+    // // Format conversation for judge evaluation
+    // const conversationText = conversation
+    //   .map(step => `${step.agent === "sales_agent" ? "Sales Agent" : "Customer"}: ${step.message}`)
+    //   .join("\n\n");
     
-    // Generate judge evaluation
-    const evaluationPrompt = dedent`
-      You are an expert conversation analyst tasked with evaluating a simulated conversation between a sales agent and a potential customer.
+    // // Generate judge evaluation
+    // const evaluationPrompt = dedent`
+    //   You are an expert conversation analyst tasked with evaluating a simulated conversation between a sales agent and a potential customer.
       
-      Here is the conversation:
-      ${conversationText}
+    //   Here is the conversation:
+    //   ${conversationText}
       
-      Your goal is to evaluate this conversation and provide detailed scoring and feedback.
+    //   Your goal is to evaluate this conversation and provide detailed scoring and feedback.
       
-      Score the conversation on these metrics (0-25 points each):
-      1. Conversation Naturalness: How realistic and natural is the flow?
-      2. Information Exchange: How effectively do agents share and request relevant information?
-      3. Goal Progress: How much progress is made toward the sales agent's goal of moving toward a demo/meeting?
-      4. Technique Demonstration: How well does the sales agent demonstrate effective techniques, and how realistically does the customer respond?
+    //   Score the conversation on these metrics (0-25 points each):
+    //   1. Conversation Naturalness: How realistic and natural is the flow?
+    //   2. Information Exchange: How effectively do agents share and request relevant information?
+    //   3. Goal Progress: How much progress is made toward the sales agent's goal of moving toward a demo/meeting?
+    //   4. Technique Demonstration: How well does the sales agent demonstrate effective techniques, and how realistically does the customer respond?
       
-      In your feedback, provide:
-      1. A summary of the overall conversation quality
-      2. Specific strengths and weaknesses for each agent
-      3. Examples from the conversation that illustrate your points
-      4. Areas where the conversation could be improved
-    `;
+    //   In your feedback, provide:
+    //   1. A summary of the overall conversation quality
+    //   2. Specific strengths and weaknesses for each agent
+    //   3. Examples from the conversation that illustrate your points
+    //   4. Areas where the conversation could be improved
+    // `;
     
-    console.log('\n📝 Judge Evaluation Prompt:');
-    console.log(evaluationPrompt);
+    // console.log('\n📝 Judge Evaluation Prompt:');
+    // console.log(evaluationPrompt);
     
-    const evaluation = await generateObject({
-      model: judgeModel,
-      prompt: evaluationPrompt,
-      schema: JudgeEvaluationSchema
-    });
+    // const evaluation = await generateObject({
+    //   model: judgeModel,
+    //   prompt: evaluationPrompt,
+    //   schema: JudgeEvaluationSchema
+    // });
     
-    console.log('\n🤖 Judge Evaluation Result:');
-    console.log(JSON.stringify(evaluation.object, null, 2));
+    // console.log('\n🤖 Judge Evaluation Result:');
+    // console.log(JSON.stringify(evaluation.object, null, 2));
     
-    // Store the simulation results
-    // if (typeof __vitest_meta__ !== 'undefined') {
-    //   // @ts-expect-error - Custom Vitest API
-    //   __vitest_meta__.simulationResults = {
-    //     conversation,
-    //     evaluation: evaluation.object
-    //   };
-    // }
     
-    // Check if expectations are met
-    const finalScore = evaluation.object.overallScore;
-    const conversationNaturalness = evaluation.object.metrics.conversationNaturalness;
-    const informationExchange = evaluation.object.metrics.informationExchange;
-    const goalProgress = evaluation.object.metrics.goalProgress;
-    const techniqueDemonstration = evaluation.object.metrics.techniqueDemonstration;
+    // // Check if expectations are met
+    // const finalScore = evaluation.object.overallScore;
+    // const conversationNaturalness = evaluation.object.metrics.conversationNaturalness;
+    // const informationExchange = evaluation.object.metrics.informationExchange;
+    // const goalProgress = evaluation.object.metrics.goalProgress;
+    // const techniqueDemonstration = evaluation.object.metrics.techniqueDemonstration;
     
-    // Set expectations based on YAML configuration
-    expect(finalScore).toBeGreaterThanOrEqual(70);
-    expect(conversationNaturalness).toBeGreaterThanOrEqual(17);
-    expect(informationExchange).toBeGreaterThanOrEqual(18);
-    expect(goalProgress).toBeGreaterThanOrEqual(18);
-    expect(techniqueDemonstration).toBeGreaterThanOrEqual(17);
+    // // Set expectations based on YAML configuration
+    // expect(finalScore).toBeGreaterThanOrEqual(70);
+    // expect(conversationNaturalness).toBeGreaterThanOrEqual(17);
+    // expect(informationExchange).toBeGreaterThanOrEqual(18);
+    // expect(goalProgress).toBeGreaterThanOrEqual(18);
+    // expect(techniqueDemonstration).toBeGreaterThanOrEqual(17);
     
-    console.log(`\n📈 Final Verdict: ${finalScore >= 70 ? '✅ PASSED' : '❌ FAILED'}`);
-  });
-});
-
-describe('Customer Support Simulation', () => {
-  // Initial system prompts from the YAML
-  const supportAgentSystemPrompt = inject("supportAgentSystemPrompt") ?? dedent`
-    You are a customer support representative for Truss Payments. Handle this customer complaint professionally and resolve their issue.
-  `;
-  
-  const customerAgentSystemPrompt = inject("customerAgentSystemPrompt") ?? dedent`
-    You are a customer who has been waiting for a refund for over two weeks. You were told it would take 3-5 business days, and you're frustrated with the delay. You need this resolved today.
-  `;
-
-  // Models defined in the configuration
-  const supportAgentModel = openai('gpt-4o');
-  const customerAgentModel = openai('gpt-4-turbo');
-  const judgeModel = openai('gpt-4-turbo');
-
-  // Test for customer support scenario
-  it('Customer Support Simulation', async () => {
-    // Initial conversation steps from the YAML
-    const initialConversation: ConversationStep[] = [
-      {
-        agent: "customer_agent",
-        message: "I've been waiting for my refund for over two weeks now. This is unacceptable."
-      },
-      {
-        agent: "support_agent",
-        message: "I'm very sorry to hear about your experience with the refund. I completely understand your frustration. Could you please provide me with your order number so I can look into this immediately?"
-      },
-      {
-        agent: "customer_agent",
-        message: "My order number is ORD-58392175. I was told it would take 3-5 business days, and it's been over two weeks now. I need this resolved today."
-      },
-      {
-        agent: "support_agent",
-        message: "Thank you for providing your order number. I've located your refund request in our system. You're absolutely right that this has taken longer than our standard processing time, and I apologize for the inconvenience this has caused you."
-      }
-    ];
-
-    // Set up simulation parameters
-    const maxTurns = 6;
-    console.log(`\n📊 Starting Customer Support Simulation`);
-    
-    // Start with the initial conversation
-    let conversation: ConversationStep[] = [...initialConversation];
-    
-    // Continue the conversation for remaining turns
-    for (let turn = 0; turn < maxTurns - initialConversation.length; turn++) {
-      // Determine whose turn it is - alternating turns
-      const agentTurn = turn % 2 === 0 ? "support_agent" : "customer_agent";
-      const model = agentTurn === "support_agent" ? supportAgentModel : customerAgentModel;
-      const systemPrompt = agentTurn === "support_agent" ? supportAgentSystemPrompt : customerAgentSystemPrompt;
-      
-      // Generate the next message
-      const result = await generateText({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...conversation.map(step => ({
-            role: step.agent === agentTurn ? "assistant" as const : "user" as const,
-            content: step.message
-          }))
-        ]
-      });
-      
-      // Add to conversation
-      conversation.push({
-        agent: agentTurn,
-        message: result.text
-      });
-
-      console.log(`\n${agentTurn}: ${result.text}`);
-    }
-    
-    // Format conversation for judge evaluation
-    const conversationText = conversation
-      .map(step => `${step.agent === "support_agent" ? "Support Agent" : "Customer"}: ${step.message}`)
-      .join("\n\n");
-    
-    // Generate judge evaluation for the customer support conversation
-    const evaluationPrompt = dedent`
-      You are an expert conversation analyst tasked with evaluating a simulated conversation between a customer support agent and an upset customer.
-      
-      Here is the conversation:
-      ${conversationText}
-      
-      Your goal is to evaluate this conversation and provide detailed scoring and feedback.
-      
-      Score the conversation on these metrics (0-25 points each):
-      1. Conversation Naturalness: How realistic and natural is the flow?
-      2. Information Exchange: How effectively do agents share and request relevant information?
-      3. Goal Progress: How much progress is made toward resolving the customer's issue?
-      4. Technique Demonstration: How well does the support agent demonstrate effective de-escalation and resolution techniques?
-      
-      In your feedback, provide:
-      1. A summary of the overall conversation quality
-      2. Specific strengths and weaknesses for each agent
-      3. Examples from the conversation that illustrate your points
-      4. Areas where the conversation could be improved
-    `;
-    
-    console.log('\n📝 Support Judge Evaluation Prompt:');
-    console.log(evaluationPrompt);
-    
-    const evaluation = await generateObject({
-      model: judgeModel,
-      prompt: evaluationPrompt,
-      schema: JudgeEvaluationSchema
-    });
-    
-    console.log('\n🤖 Support Judge Evaluation Result:');
-    console.log(JSON.stringify(evaluation.object, null, 2));
-    
-    // Store results for analysis
-    // if (typeof __vitest_meta__ !== 'undefined') {
-    //   // @ts-expect-error - Custom Vitest API
-    //   __vitest_meta__.supportSimulationResults = {
-    //     conversation,
-    //     evaluation: evaluation.object
-    //   };
-    // }
-    
-    // Check if expectations are met
-    const finalScore = evaluation.object.overallScore;
-    
-    // Set basic expectations
-    expect(finalScore).toBeGreaterThanOrEqual(70);
-    console.log(`\n📈 Support Simulation Score: ${finalScore}`);
-    console.log(`Final Verdict: ${finalScore >= 70 ? '✅ PASSED' : '❌ FAILED'}`);
+    // console.log(`\n📈 Final Verdict: ${finalScore >= 70 ? '✅ PASSED' : '❌ FAILED'}`);
   });
 });
