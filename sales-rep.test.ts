@@ -297,143 +297,184 @@ describe('Sales Call Simulation', () => {
   const customerAgentModel = openai('gpt-4o'); // Using gpt-4-turbo as a stand-in for claude-3-sonnet
   const judgeModel = openai('gpt-4o');
 
-  // Test a single iteration of the sales conversation
-  it('Sales Call Simulation', async () => {
-    // Determine if we should use our imported conversation or start fresh
-    // You can change this conversationStartIndex to start from a different point in the conversation
-    const conversationStartIndex = 10; // Set to 10 as requested
-    
-    // Get initial conversation from the full conversation
-    // Always include messages from the start up to the specified index
-    const initialConversation: ConversationStep[] = 
-      conversationStartIndex > 0 ? getConversationFromIndex(0, conversationStartIndex) : getInitialConversation();
-    
-    // Set up simulation parameters
-    const maxTurns = 50;
-    console.log(`\n📊 Starting Sales Call Simulation (starting from conversation index ${conversationStartIndex})`);
-    
-    // Log the initial conversation first with colors
-    console.log('\n--- Initial Conversation ---');
-    initialConversation.forEach(step => {
-      const agentColor = step.agent === "sales_agent" ? "\x1b[34m" : "\x1b[31m"; // Blue for sales, Red for customer
-      console.log(`\n${agentColor}${step.agent === "sales_agent" ? "Sales Agent" : "Customer"}: ${step.message}\x1b[0m`);
-    });
-    console.log('\n--- Continuing Conversation ---');
-    
-    // Start with the initial conversation
-    let conversation: ConversationStep[] = [...initialConversation];
-    let conversationTerminated = false;
-    
-    // Continue the conversation for maxTurns - initialConversation.length turns
-    for (let turn = 0; turn < maxTurns - initialConversation.length; turn++) {
-      // Check if conversation has been terminated
-      if (conversationTerminated) {
-        console.log("\n\x1b[32m--- Conversation naturally terminated ---\x1b[0m");
-        break;
-      }
-      
-      // Determine whose turn it is - alternating turns
-      const agentTurn = turn % 2 === 0 ? "sales_agent" : "customer_agent";
-      const model = agentTurn === "sales_agent" ? salesAgentModel : customerAgentModel;
-      const systemPrompt = agentTurn === "sales_agent" ? salesAgentSystemPrompt : customerAgentSystemPrompt;
-      const agentColor = agentTurn === "sales_agent" ? "\x1b[34m" : "\x1b[31m"; // Blue for sales, Red for customer
-      
-      // Remove the delay between messages
-      
-      // Generate the next message
-      const result = await generateText({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...conversation.map(step => ({
-            role: step.agent === agentTurn ? "assistant" as const : "user" as const,
-            content: step.message
-          }))
-        ]
-      });
-      
-      // Check if the message contains the termination token
-      let messageText = result.text;
-      if (messageText.includes("[END_CONVERSATION]")) {
-        messageText = messageText.replace("[END_CONVERSATION]", "").trim();
-        conversationTerminated = true;
-      }
-      
-      // Add to conversation
-      conversation.push({
-        agent: agentTurn,
-        message: messageText
-      });
+  // Get the total length of the conversation to determine valid starting indices
+  const maxConversationIndex = fullConversation.length - 2; // Subtract 2 to ensure at least 2 more exchanges
 
-      console.log(`\n${agentColor}${agentTurn === "sales_agent" ? "Sales Agent" : "Customer"}: ${messageText}\x1b[0m`);
-    }
-    
-    if (!conversationTerminated) {
-      console.log("\n\x1b[33m--- Conversation reached maximum turns ---\x1b[0m");
-    }
-    
-    // Format conversation for judge evaluation
-    const conversationText = conversation
-      .map(step => `${step.agent === "sales_agent" ? "Sales Agent" : "Customer"}: ${step.message}`)
-      .join("\n\n");
-    
-    // Generate judge evaluation
-    const evaluationPrompt = dedent`
-      You are an expert conversation analyst tasked with evaluating a simulated conversation between a sales agent and a potential customer.
+  // Define number of simulations to run
+  const numberOfSimulations = 3; // Adjust as needed
+
+  // Create simulation configurations
+  const simulations = Array.from({ length: numberOfSimulations }, (_, i) => ({
+    id: i + 1,
+    // Generate a random starting index for each simulation
+    startIndex: Math.floor(Math.random() * (maxConversationIndex + 1))
+  }));
+
+  // Array to store results from all simulations
+  const simulationResults = [];
+
+  // Run tests for each simulation using forEach
+  simulations.forEach(simulation => {
+    it(`Sales Call Simulation #${simulation.id} with random starting point`, async () => {
+      const conversationStartIndex = simulation.startIndex;
       
-      Here is the conversation:
-      ${conversationText}
+      // Get initial conversation from the full conversation
+      const initialConversation: ConversationStep[] = 
+        conversationStartIndex > 0 ? getConversationFromIndex(0, conversationStartIndex) : getInitialConversation();
       
-      Your goal is to evaluate this conversation and provide a boolean assessment for both the sales agent and customer agent.
+      // Set up simulation parameters
+      const maxTurns = 50;
+      console.log(`\n📊 Starting Sales Call Simulation #${simulation.id} (starting from conversation index ${conversationStartIndex})`);
       
-      For the sales agent, evaluate:
-      1. Did they effectively introduce themselves and Truss Payments?
-      2. Did they attempt to identify the customer's payment challenges?
-      3. Did they present the solution clearly?
-      4. Did they emphasize key benefits relevant to the customer?
-      5. Did they handle objections professionally?
+      // Log the initial conversation first with colors
+      console.log('\n--- Initial Conversation ---');
+      initialConversation.forEach(step => {
+        const agentColor = step.agent === "sales_agent" ? "\x1b[34m" : "\x1b[31m"; // Blue for sales, Red for customer
+        console.log(`\n${agentColor}${step.agent === "sales_agent" ? "Sales Agent" : "Customer"}: ${step.message}\x1b[0m`);
+      });
+      console.log('\n--- Continuing Conversation ---');
       
-      For the customer agent, evaluate:
-      1. Did they maintain their established character traits (resistant to change, values relationships, etc.)?
-      2. Did they communicate in a direct, sometimes blunt style?
-      3. Did they question the benefits of changing their established processes?
-      4. Did they respond realistically to the sales pitch?
+      // Start with the initial conversation
+      let conversation: ConversationStep[] = [...initialConversation];
+      let conversationTerminated = false;
       
-      Provide a boolean value (true for pass, false for fail) for each agent, along with brief feedback explaining your decision.
-    `;
-    
-    console.log('\n📝 Judge Evaluation Prompt:');
-    console.log("\x1b[35m" + evaluationPrompt + "\x1b[0m"); // Purple color for judge prompt
-    
-    const evaluation = await generateObject({
-      model: judgeModel,
-      prompt: evaluationPrompt,
-      schema: JudgeEvaluationSchema
-    });
-    
-    console.log('\n🤖 Judge Evaluation Result:');
-    console.log("\x1b[35m" + JSON.stringify(evaluation.object, null, 2) + "\x1b[0m"); // Purple color for judge result
-    
-    
-    // Check if expectations are met
-    const salesAgentResult = evaluation.object.agentEvaluation.salesAgent;
-    const customerAgentResult = evaluation.object.agentEvaluation.customerAgent;
-    
-    // Both agents need to pass for the test to pass
-    const testPassed = salesAgentResult && customerAgentResult;
-    
-    console.log(`\n📈 Final Verdict: ${testPassed ? '✅ PASSED' : '❌ FAILED'}`);
-    console.log(`Sales Agent: ${salesAgentResult ? '✅ PASSED' : '❌ FAILED'}`);
-    console.log(`Customer Agent: ${customerAgentResult ? '✅ PASSED' : '❌ FAILED'}`);
-    if (evaluation.object.agentEvaluation.salesAgentFeedback) {
-      console.log(`\nSales Agent Feedback: \x1b[35m${evaluation.object.agentEvaluation.salesAgentFeedback}\x1b[0m`); // Purple color for feedback
-    }
-    if (evaluation.object.agentEvaluation.customerAgentFeedback) {
-      console.log(`\nCustomer Agent Feedback: \x1b[35m${evaluation.object.agentEvaluation.customerAgentFeedback}\x1b[0m`); // Purple color for feedback
-    }
+      // Continue the conversation for maxTurns turns (not counting the initial conversation)
+      for (let turn = 0; turn < maxTurns; turn++) {
+        // Check if conversation has been terminated
+        if (conversationTerminated) {
+          console.log("\n\x1b[32m--- Conversation naturally terminated ---\x1b[0m");
+          break;
+        }
+        
+        // Determine whose turn it is - alternating turns
+        const agentTurn = turn % 2 === 0 ? "sales_agent" : "customer_agent";
+        const model = agentTurn === "sales_agent" ? salesAgentModel : customerAgentModel;
+        const systemPrompt = agentTurn === "sales_agent" ? salesAgentSystemPrompt : customerAgentSystemPrompt;
+        const agentColor = agentTurn === "sales_agent" ? "\x1b[34m" : "\x1b[31m"; // Blue for sales, Red for customer
+        
+        // Generate the next message
+        const result = await generateText({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...conversation.map(step => ({
+              role: step.agent === agentTurn ? "assistant" as const : "user" as const,
+              content: step.message
+            }))
+          ]
+        });
+        
+        // Check if the message contains the termination token
+        let messageText = result.text;
+        if (messageText.includes("[END_CONVERSATION]")) {
+          messageText = messageText.replace("[END_CONVERSATION]", "").trim();
+          conversationTerminated = true;
+        }
+        
+        // Add to conversation
+        conversation.push({
+          agent: agentTurn,
+          message: messageText
+        });
+
+        console.log(`\n${agentColor}${agentTurn === "sales_agent" ? "Sales Agent" : "Customer"}: ${messageText}\x1b[0m`);
+      }
+      
+      if (!conversationTerminated) {
+        console.log("\n\x1b[33m--- Conversation reached maximum turns ---\x1b[0m");
+      }
+      
+      // Format conversation for judge evaluation
+      const conversationText = conversation
+        .map(step => `${step.agent === "sales_agent" ? "Sales Agent" : "Customer"}: ${step.message}`)
+        .join("\n\n");
+      
+      // Generate judge evaluation
+      const evaluationPrompt = dedent`
+        You are an expert conversation analyst tasked with evaluating a simulated conversation between a sales agent and a potential customer.
+        
+        Here is the conversation:
+        ${conversationText}
+        
+        Your goal is to evaluate this conversation and provide a boolean assessment for both the sales agent and customer agent.
+        
+        For the sales agent, evaluate:
+        1. Did they effectively introduce themselves and Truss Payments?
+        2. Did they attempt to identify the customer's payment challenges?
+        3. Did they present the solution clearly?
+        4. Did they emphasize key benefits relevant to the customer?
+        5. Did they handle objections professionally?
+        
+        For the customer agent, evaluate:
+        1. Did they maintain their established character traits (resistant to change, values relationships, etc.)?
+        2. Did they communicate in a direct, sometimes blunt style?
+        3. Did they question the benefits of changing their established processes?
+        4. Did they respond realistically to the sales pitch?
+        
+        Provide a boolean value (true for pass, false for fail) for each agent, along with brief feedback explaining your decision.
+      `;
+      
+      console.log('\n📝 Judge Evaluation Prompt:');
+      console.log("\x1b[35m" + evaluationPrompt + "\x1b[0m"); // Purple color for judge prompt
+      
+      const evaluation = await generateObject({
+        model: judgeModel,
+        prompt: evaluationPrompt,
+        schema: JudgeEvaluationSchema
+      });
+      
+      console.log('\n🤖 Judge Evaluation Result:');
+      console.log("\x1b[35m" + JSON.stringify(evaluation.object, null, 2) + "\x1b[0m"); // Purple color for judge result
+      
+      // Check if expectations are met
+      const salesAgentResult = evaluation.object.agentEvaluation.salesAgent;
+      const customerAgentResult = evaluation.object.agentEvaluation.customerAgent;
+      
+      // Both agents need to pass for the test to pass
+      const testPassed = salesAgentResult && customerAgentResult;
+      
+      console.log(`\n📈 Simulation #${simulation.id} Verdict: ${testPassed ? '✅ PASSED' : '❌ FAILED'}`);
+      console.log(`Starting Index: ${conversationStartIndex}`);
+      console.log(`Sales Agent: ${salesAgentResult ? '✅ PASSED' : '❌ FAILED'}`);
+      console.log(`Customer Agent: ${customerAgentResult ? '✅ PASSED' : '❌ FAILED'}`);
+      
+      // Store the results for summary analysis
+      simulationResults.push({
+        simulationNumber: simulation.id,
+        startIndex: conversationStartIndex,
+        salesAgentPassed: salesAgentResult,
+        customerAgentPassed: customerAgentResult,
+        overallPassed: testPassed,
+        salesAgentFeedback: evaluation.object.agentEvaluation.salesAgentFeedback,
+        customerAgentFeedback: evaluation.object.agentEvaluation.customerAgentFeedback
+      });
 
       // Set expectations based on YAML configuration
       expect(salesAgentResult).toBe(true);
       expect(customerAgentResult).toBe(true);
+    });
+  });
+
+  // Add a summary test that runs after all simulations
+  it('Sales Call Simulation Summary', () => {
+    console.log('\n📊 SIMULATION SUMMARY 📊');
+    console.log(`Total Simulations: ${numberOfSimulations}`);
+    
+    const passedSimulations = simulationResults.filter(result => result.overallPassed).length;
+    console.log(`Passed Simulations: ${passedSimulations} (${(passedSimulations/numberOfSimulations*100).toFixed(2)}%)`);
+    
+    // Output detailed results
+    console.log('\nDetailed Results:');
+    simulationResults.forEach(result => {
+      console.log(`\nSimulation #${result.simulationNumber} (Starting at index ${result.startIndex}):`);
+      console.log(`  Overall: ${result.overallPassed ? '✅ PASSED' : '❌ FAILED'}`);
+      console.log(`  Sales Agent: ${result.salesAgentPassed ? '✅ PASSED' : '❌ FAILED'}`);
+      console.log(`  Customer Agent: ${result.customerAgentPassed ? '✅ PASSED' : '❌ FAILED'}`);
+      console.log(`  Sales Agent Feedback: ${result.salesAgentFeedback || 'No feedback provided'}`);
+      console.log(`  Customer Agent Feedback: ${result.customerAgentFeedback || 'No feedback provided'}`);
+    });
+    
+    // This test is just for reporting, always passes
+    expect(true).toBe(true);
   });
 });
