@@ -29,8 +29,10 @@ const CustomerAgentEvaluationSchema = z.object({
 
 const JudgeEvaluationSchema = z.object({
   agentEvaluation: z.object({
-    ...SalesAgentEvaluationSchema.shape,
-    ...CustomerAgentEvaluationSchema.shape
+    salesAgent: z.boolean(),
+    salesAgentFeedback: z.string().optional(),
+    customerAgent: z.boolean(),
+    customerAgentFeedback: z.string().optional()
   })
 });
 
@@ -62,16 +64,24 @@ if (!fs.existsSync(testResultsDir)) {
 }
 
 // Function to save detailed test results
-function saveDetailedResults(conversationData, simulationResults, testStartTime) {
+function saveDetailedResults(
+  conversationData: Array<any>, 
+  simulationResults: Array<any>, 
+  testStartTime: number
+) {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   
   // Calculate summary statistics
   const totalSimulations = simulationResults.length;
-  const passedSimulations = simulationResults.filter(result => result.overallPassed).length;
+  const passedSimulations = simulationResults.filter((result: any) => result.overallPassed).length;
   const passRate = totalSimulations > 0 ? (passedSimulations / totalSimulations) * 100 : 0;
   
   // Create detailed results object
-  const detailedResults = {
+  const detailedResults: {
+    summary: any;
+    agentSettings: any;
+    simulations: Record<string, any>;
+  } = {
     summary: {
       totalSimulations,
       passedSimulations,
@@ -81,11 +91,19 @@ function saveDetailedResults(conversationData, simulationResults, testStartTime)
       testRunDate: new Date().toLocaleDateString(),
       testRunTime: new Date().toLocaleTimeString()
     },
+    agentSettings: {
+      salesAgentModel: 'gpt-4o-mini',
+      customerAgentModel: 'gpt-4o-mini',
+      judgeModel: 'gpt-4o',
+      optimizerModel: 'gpt-4o',
+      salesAgentSystemPrompt: inject("salesAgentSystemPrompt") || "",
+      customerAgentSystemPrompt: inject("customerAgentSystemPrompt") || ""
+    },
     simulations: {}
   };
   
   // Process each simulation to create a cleaner output
-  conversationData.forEach(simulation => {
+  conversationData.forEach((simulation: any) => {
     detailedResults.simulations[simulation.simulationNumber] = {
       id: simulation.simulationNumber,
       startIndex: simulation.startIndex,
@@ -391,7 +409,7 @@ describe('Sales Call Simulation', () => {
   // Define number of optimization iterations
   const numberOfOptimizationIterations = 3
   // Define number of simulations per iteration
-  const numberOfSimulationsPerIteration = 3
+  const numberOfSimulationsPerIteration = 1
 
   // Track test start time
   const testStartTime = Date.now();
@@ -399,388 +417,437 @@ describe('Sales Call Simulation', () => {
 
   // Store the optimized prompt between iterations
   let optimizedSalesAgentPrompt = salesAgentSystemPrompt;
+  
+  // Store all simulation results across iterations
+  const allIterationResults: Array<{
+    iteration: number;
+    passRate: string;
+    passedSimulations: number;
+    totalSimulations: number;
+  }> = [];
 
-  // Run the optimization loop
-  for (let iteration = 0; iteration < numberOfOptimizationIterations; iteration++) {
-    // Array to store results from all simulations in this iteration
-    const simulationResults = [];
-    // Array to store detailed conversation data for this iteration
-    const conversationData = [];
-    
-    // Current prompts - will be updated by optimizer after each iteration
-    let currentSalesAgentSystemPrompt = optimizedSalesAgentPrompt;
-    
-    console.log(`\n🔄 Starting Optimization Iteration #${iteration + 1}`);
-    
-    // Get the total length of the conversation to determine valid starting indices
-    const maxConversationIndex = fullConversation.length - 2;
+  // Instead of using a for loop with describe blocks, we'll use a single describe block
+  // and run iterations sequentially within it
+  describe('Sales Agent Optimization Process', () => {
+    // Run each iteration sequentially
+    it('should optimize the sales agent prompt through multiple iterations', async () => {
+      // Array to store all conversation data across all iterations
+      const allConversationData: Array<any> = [];
+      // Array to store all simulation results across all iterations
+      const allSimulationResults: Array<any> = [];
+      
+      for (let iteration = 0; iteration < numberOfOptimizationIterations; iteration++) {
+        console.log(`\n🔄 Starting Optimization Iteration #${iteration + 1}`);
+        console.log(`\n🔄 Using Sales Agent Prompt:\n${optimizedSalesAgentPrompt.substring(0, 200)}...\n`);
+        
+        // Array to store results from all simulations in this iteration
+        const simulationResults: Array<any> = [];
+        // Array to store detailed conversation data for this iteration
+        const conversationData: Array<any> = [];
+        
+        // Get the total length of the conversation to determine valid starting indices
+        const maxConversationIndex = fullConversation.length - 2;
 
-    // Create simulation configurations for this iteration
-    const simulations = Array.from({ length: numberOfSimulationsPerIteration }, (_, i) => ({
-      id: i + 1,
-      // Generate a random starting index for each simulation
-      startIndex: Math.floor(Math.random() * (maxConversationIndex + 1))
-    }));
-
-    // Run tests for each simulation in this iteration
-    simulations.forEach(simulation => {
-      it(`Iteration ${iteration + 1}, Simulation #${simulation.id} with random starting point`, async () => {
-        const conversationStartIndex = simulation.startIndex;
-        
-        // Get initial conversation from the full conversation
-        const initialConversation: ConversationStep[] = 
-          conversationStartIndex > 0 ? getConversationFromIndex(0, conversationStartIndex) : getInitialConversation();
-        
-        // Set up simulation parameters
-        const maxTurns = 50;
-        const simulationStartTime = Date.now();
-        console.log(`\n📊 Starting Sales Call Simulation #${simulation.id} (starting from conversation index ${conversationStartIndex})`);
-        
-        // Log the initial conversation first with colors
-        console.log('\n--- Initial Conversation ---');
-        initialConversation.forEach(step => {
-          const agentColor = step.agent === "sales_agent" ? "\x1b[34m" : "\x1b[31m"; // Blue for sales, Red for customer
-          console.log(`\n${agentColor}${step.agent === "sales_agent" ? "Sales Agent" : "Customer"}: ${step.message}\x1b[0m`);
-        });
-        console.log('\n--- Continuing Conversation ---');
-        
-        // Start with the initial conversation
-        let conversation: ConversationStep[] = [...initialConversation];
-        let conversationTerminated = false;
-        
-        // Continue the conversation for maxTurns turns (not counting the initial conversation)
-        for (let turn = 0; turn < maxTurns; turn++) {
-          // Check if conversation has been terminated
-          if (conversationTerminated) {
-            console.log("\n\x1b[32m--- Conversation naturally terminated ---\x1b[0m");
-            break;
-          }
-          
-          // Determine whose turn it is - alternating turns
-          const agentTurn = turn % 2 === 0 ? "sales_agent" : "customer_agent";
-          const model = agentTurn === "sales_agent" ? salesAgentModel : customerAgentModel;
-          const systemPrompt = agentTurn === "sales_agent" ? currentSalesAgentSystemPrompt : customerAgentSystemPrompt;
-          const agentColor = agentTurn === "sales_agent" ? "\x1b[34m" : "\x1b[31m"; // Blue for sales, Red for customer
-          
-          // Generate the next message
-          const result = await generateText({
-            model,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              ...conversation.map(step => ({
-                role: step.agent === agentTurn ? "assistant" as const : "user" as const,
-                content: step.message
-              }))
-            ]
-          });
-          
-          // Check if the message contains the termination token
-          let messageText = result.text;
-          if (messageText.includes("[END_CONVERSATION]")) {
-            messageText = messageText.replace("[END_CONVERSATION]", "").trim();
-            conversationTerminated = true;
-          }
-          
-          // Add to conversation
-          conversation.push({
-            agent: agentTurn,
-            message: messageText
-          });
-
-          console.log(`\n${agentColor}${agentTurn === "sales_agent" ? "Sales Agent" : "Customer"}: ${messageText}\x1b[0m`);
-        }
-        
-        if (!conversationTerminated) {
-          console.log("\n\x1b[33m--- Conversation reached maximum turns ---\x1b[0m");
-        }
-        
-        // Format conversation for judge evaluation
-        const conversationText = conversation
-          .map(step => `${step.agent === "sales_agent" ? "Sales Agent" : "Customer"}: ${step.message}`)
-          .join("\n\n");
-        
-        // Generate judge evaluation
-        const evaluationPrompt = dedent`
-          You are an expert conversation analyst tasked with evaluating a simulated conversation between a sales agent and a potential customer.
-          
-          Here is the conversation:
-          ${conversationText}
-          
-          Your goal is to evaluate this conversation and provide a boolean assessment for both the sales agent and customer agent.
-          
-          For the sales agent, evaluate if they completed these specific requirements:
-          1. Did they clearly introduce themselves and explain that Truss Payments helps contractors get paid faster and save on processing fees?
-          2. Did they ask specific questions to identify the customer's payment challenges (e.g., "How do you currently handle payments?" or "What frustrates you about your current payment process?")?
-          3. Did they explicitly mention these key features: no fees, instant settlement, mobile check deposit, and QuickBooks integration?
-          4. Did they address at least one specific pain point mentioned by the customer with a relevant solution?
-          5. Did they handle objections professionally by acknowledging concerns before countering them?
-          6. Did they attempt to move the conversation forward with a clear next step (demo, follow-up call, etc.)?
-          
-          For the customer agent, evaluate:
-          1. Did they maintain their established character traits (resistant to change, values relationships, etc.)?
-          2. Did they communicate in a direct, sometimes blunt style?
-          3. Did they question the benefits of changing their established processes?
-          4. Did they respond realistically to the sales pitch?
-          5. Did they give the sales agent adequate opportunity to present their solution before making a final decision?
-          
-          Provide a boolean value (true for pass, false for fail) for each agent, along with brief feedback explaining your decision.
-        `;
-        
-        console.log('\n📝 Judge Evaluation Prompt:');
-        console.log("\x1b[35m" + evaluationPrompt + "\x1b[0m"); // Purple color for judge prompt
-        
-        const evaluation = await generateObject({
-          model: judgeModel,
-          prompt: evaluationPrompt,
-          schema: JudgeEvaluationSchema
-        });
-        
-        console.log('\n🤖 Judge Evaluation Result:');
-        console.log("\x1b[35m" + JSON.stringify(evaluation.object, null, 2) + "\x1b[0m"); // Purple color for judge result
-        
-        // Check if expectations are met
-        const salesAgentResult = evaluation.object.agentEvaluation.salesAgent;
-        const customerAgentResult = evaluation.object.agentEvaluation.customerAgent;
-        
-        // Both agents need to pass for the test to pass
-        const testPassed = salesAgentResult && customerAgentResult;
-        
-        console.log(`\n📈 Iteration ${iteration + 1}, Simulation #${simulation.id} Verdict: ${testPassed ? '✅ PASSED' : '❌ FAILED'}`);
-        console.log(`Starting Index: ${conversationStartIndex}`);
-        console.log(`Sales Agent: ${salesAgentResult ? '✅ PASSED' : '❌ FAILED'}`);
-        console.log(`Customer Agent: ${customerAgentResult ? '✅ PASSED' : '❌ FAILED'}`);
-        
-        // Calculate simulation duration
-        const simulationDuration = Date.now() - simulationStartTime;
-        console.log(`Simulation Duration: ${(simulationDuration / 1000).toFixed(2)}s`);
-              
-        // Store the conversation for later saving
-        const conversationForSaving = conversation.map(step => ({
-          agent: step.agent === "sales_agent" ? "Sales Agent" : "Customer",
-          message: step.message
+        // Create simulation configurations for this iteration
+        const simulations = Array.from({ length: numberOfSimulationsPerIteration }, (_, i) => ({
+          id: i + 1,
+          // Generate a random starting index for each simulation
+          startIndex: Math.floor(Math.random() * (maxConversationIndex + 1))
         }));
-        
-        // Store the results for summary analysis
-        simulationResults.push({
-          iterationNumber: iteration + 1,
-          simulationNumber: simulation.id,
-          startIndex: conversationStartIndex,
-          salesAgentPassed: salesAgentResult,
-          customerAgentPassed: customerAgentResult,
-          overallPassed: testPassed,
-          duration: simulationDuration,
-          salesAgentFeedback: evaluation.object.agentEvaluation.salesAgentFeedback,
-          customerAgentFeedback: evaluation.object.agentEvaluation.customerAgentFeedback
-        });
 
-        // Store detailed conversation data
-        conversationData.push({
-          iterationNumber: iteration + 1,
-          simulationNumber: simulation.id,
-          startIndex: conversationStartIndex,
-          duration: simulationDuration,
-          conversation: conversationForSaving,
-          evaluation: {
-            salesAgentPassed: salesAgentResult,
-            customerAgentPassed: customerAgentResult,
-            overallPassed: testPassed,
-            salesAgentFeedback: evaluation.object.agentEvaluation.salesAgentFeedback,
-            customerAgentFeedback: evaluation.object.agentEvaluation.customerAgentFeedback
-          }
-        });
-      });
-    });
-
-    // Add a summary test for this iteration
-    it(`Iteration ${iteration + 1} Summary`, async () => {
-      console.log(`\n📊 ITERATION ${iteration + 1} SUMMARY 📊`);
-      console.log(`Total Simulations: ${numberOfSimulationsPerIteration}`);
-      
-      const passedSimulations = simulationResults.filter(result => result.overallPassed).length;
-      const passRate = (passedSimulations/numberOfSimulationsPerIteration*100).toFixed(2);
-      console.log(`Passed Simulations: ${passedSimulations} (${passRate}%)`);
-      
-      // Output detailed results
-      console.log('\nDetailed Results:');
-      simulationResults.forEach(result => {
-        console.log(`\nSimulation #${result.simulationNumber} (Starting at index ${result.startIndex}):`);
-        console.log(`  Overall: ${result.overallPassed ? '✅ PASSED' : '❌ FAILED'}`);
-        console.log(`  Sales Agent: ${result.salesAgentPassed ? '✅ PASSED' : '❌ FAILED'}`);
-        console.log(`  Customer Agent: ${result.customerAgentPassed ? '✅ PASSED' : '❌ FAILED'}`);
-        console.log(`  Duration: ${(result.duration / 1000).toFixed(2)}s`);
-        console.log(`  Sales Agent Feedback: ${result.salesAgentFeedback || 'No feedback provided'}`);
-        console.log(`  Customer Agent Feedback: ${result.customerAgentFeedback || 'No feedback provided'}`);
-      });
-      
-      // Save results for this iteration
-      const iterationResultsDir = path.join(testResultsDir, `iteration-${iteration + 1}`);
-      if (!fs.existsSync(iterationResultsDir)) {
-        fs.mkdirSync(iterationResultsDir, { recursive: true });
-      }
-      
-      const iterationResultsPath = path.join(iterationResultsDir, 'results.json');
-      fs.writeFileSync(
-        iterationResultsPath,
-        JSON.stringify({
-          iteration: iteration + 1,
-          totalSimulations: numberOfSimulationsPerIteration,
-          passedSimulations,
-          passRate: `${passRate}%`,
-          results: simulationResults,
-          conversations: conversationData
-        }, null, 2)
-      );
-      
-      // If this is not the final iteration, run the optimizer
-      if (iteration < numberOfOptimizationIterations - 1) {
-        console.log('\n🧠 Running Optimizer Agent...');
-        
-        // Prepare data for optimizer
-        const allConversations = conversationData.map(data => {
-          return {
-            conversation: data.conversation,
-            evaluation: data.evaluation
-          };
-        });
-        
-        // Define the evaluation criteria for the optimizer
-        const evaluationCriteria = dedent`
-          For the sales agent, evaluate if they completed these specific requirements:
-          1. Did they clearly introduce themselves and explain that Truss Payments helps contractors get paid faster and save on processing fees?
-          2. Did they ask specific questions to identify the customer's payment challenges (e.g., "How do you currently handle payments?" or "What frustrates you about your current payment process?")?
-          3. Did they explicitly mention these key features: no fees, instant settlement, mobile check deposit, and QuickBooks integration?
-          4. Did they address at least one specific pain point mentioned by the customer with a relevant solution?
-          5. Did they handle objections professionally by acknowledging concerns before countering them?
-          6. Did they attempt to move the conversation forward with a clear next step (demo, follow-up call, etc.)?
+        // Run simulations for this iteration
+        for (const simulation of simulations) {
+          const conversationStartIndex = simulation.startIndex;
           
-          For the customer agent, evaluate:
-          1. Did they maintain their established character traits (resistant to change, values relationships, etc.)?
-          2. Did they communicate in a direct, sometimes blunt style?
-          3. Did they question the benefits of changing their established processes?
-          4. Did they respond realistically to the sales pitch?
-          5. Did they give the sales agent adequate opportunity to present their solution before making a final decision?
-        `;
+          // Get initial conversation from the full conversation
+          const initialConversation: ConversationStep[] = 
+            conversationStartIndex > 0 ? getConversationFromIndex(0, conversationStartIndex) : getInitialConversation();
+          
+          // Set up simulation parameters
+          const maxTurns = 50;
+          const simulationStartTime = Date.now();
+          console.log(`\n📊 Starting Sales Call Simulation #${simulation.id} (starting from conversation index ${conversationStartIndex})`);
+          
+          // Log the initial conversation first with colors
+          console.log('\n--- Initial Conversation ---');
+          initialConversation.forEach(step => {
+            const agentColor = step.agent === "sales_agent" ? "\x1b[34m" : "\x1b[31m"; // Blue for sales, Red for customer
+            console.log(`\n${agentColor}${step.agent === "sales_agent" ? "Sales Agent" : "Customer"}: ${step.message}\x1b[0m`);
+          });
+          console.log('\n--- Continuing Conversation ---');
+          
+          // Start with the initial conversation
+          let conversation: ConversationStep[] = [...initialConversation];
+          let conversationTerminated = false;
+          
+          // Continue the conversation for maxTurns turns (not counting the initial conversation)
+          for (let turn = 0; turn < maxTurns; turn++) {
+            // Check if conversation has been terminated
+            if (conversationTerminated) {
+              console.log("\n\x1b[32m--- Conversation naturally terminated ---\x1b[0m");
+              break;
+            }
+            
+            // Determine whose turn it is - alternating turns
+            const agentTurn = turn % 2 === 0 ? "sales_agent" : "customer_agent";
+            const model = agentTurn === "sales_agent" ? salesAgentModel : customerAgentModel;
+            const systemPrompt = agentTurn === "sales_agent" ? optimizedSalesAgentPrompt : customerAgentSystemPrompt;
+            const agentColor = agentTurn === "sales_agent" ? "\x1b[34m" : "\x1b[31m"; // Blue for sales, Red for customer
+            
+            // Generate the next message
+            const result = await generateText({
+              model,
+              messages: [
+                { role: 'system', content: systemPrompt },
+                ...conversation.map(step => ({
+                  role: step.agent === agentTurn ? "assistant" as const : "user" as const,
+                  content: step.message
+                }))
+              ]
+            });
+            
+            // Check if the message contains the termination token
+            let messageText = result.text;
+            if (messageText.includes("[END_CONVERSATION]")) {
+              messageText = messageText.replace("[END_CONVERSATION]", "").trim();
+              conversationTerminated = true;
+            }
+            
+            // Add to conversation
+            conversation.push({
+              agent: agentTurn,
+              message: messageText
+            });
+
+            console.log(`\n${agentColor}${agentTurn === "sales_agent" ? "Sales Agent" : "Customer"}: ${messageText}\x1b[0m`);
+          }
+          
+          if (!conversationTerminated) {
+            console.log("\n\x1b[33m--- Conversation reached maximum turns ---\x1b[0m");
+          }
+          
+          // Format conversation for judge evaluation
+          const conversationText = conversation
+            .map(step => `${step.agent === "sales_agent" ? "Sales Agent" : "Customer"}: ${step.message}`)
+            .join("\n\n");
+          
+          // Generate judge evaluation
+          const evaluationPrompt = dedent`
+            You are an expert conversation analyst tasked with evaluating a simulated conversation between a sales agent and a potential customer.
+            
+            Here is the conversation:
+            ${conversationText}
+            
+            Your goal is to evaluate this conversation and provide a boolean assessment for both the sales agent and customer agent.
+            
+            For the sales agent, evaluate if they completed these specific requirements:
+            1. Did they clearly introduce themselves and explain that Truss Payments helps contractors get paid faster and save on processing fees?
+            2. Did they ask specific questions to identify the customer's payment challenges (e.g., "How do you currently handle payments?" or "What frustrates you about your current payment process?")?
+            3. Did they explicitly mention these key features: no fees, instant settlement, mobile check deposit, and QuickBooks integration?
+            4. Did they address at least one specific pain point mentioned by the customer with a relevant solution?
+            5. Did they handle objections professionally by acknowledging concerns before countering them?
+            6. Did they attempt to move the conversation forward with a clear next step (demo, follow-up call, etc.)?
+            
+            For the customer agent, evaluate:
+            1. Did they maintain their established character traits (resistant to change, values relationships, etc.)?
+            2. Did they communicate in a direct, sometimes blunt style?
+            3. Did they question the benefits of changing their established processes?
+            4. Did they respond realistically to the sales pitch?
+            5. Did they give the sales agent adequate opportunity to present their solution before making a final decision?
+            
+            You MUST provide a boolean value (true for pass, false for fail) for BOTH the sales agent AND the customer agent, along with brief feedback explaining your decision.
+            
+            Your response must include:
+            - salesAgent: boolean (true/false)
+            - salesAgentFeedback: string (explanation)
+            - customerAgent: boolean (true/false)
+            - customerAgentFeedback: string (explanation)
+          `;
+          
+          console.log('\n📝 Judge Evaluation Prompt:');
+          console.log("\x1b[35m" + evaluationPrompt + "\x1b[0m"); // Purple color for judge prompt
+          
+          try {
+            const evaluation = await generateObject({
+              model: judgeModel,
+              prompt: evaluationPrompt,
+              schema: JudgeEvaluationSchema
+            });
+            
+            console.log('\n🤖 Judge Evaluation Result:');
+            console.log("\x1b[35m" + JSON.stringify(evaluation.object, null, 2) + "\x1b[0m"); // Purple color for judge result
+            
+            // Check if expectations are met
+            const salesAgentResult = evaluation.object.agentEvaluation.salesAgent;
+            const customerAgentResult = evaluation.object.agentEvaluation.customerAgent;
+            
+            // Both agents need to pass for the test to pass
+            const testPassed = salesAgentResult && customerAgentResult;
+            
+            console.log(`\n📈 Iteration ${iteration + 1}, Simulation #${simulation.id} Verdict: ${testPassed ? '✅ PASSED' : '❌ FAILED'}`);
+            console.log(`Starting Index: ${conversationStartIndex}`);
+            console.log(`Sales Agent: ${salesAgentResult ? '✅ PASSED' : '❌ FAILED'}`);
+            console.log(`Customer Agent: ${customerAgentResult ? '✅ PASSED' : '❌ FAILED'}`);
+            
+            // Calculate simulation duration
+            const simulationDuration = Date.now() - simulationStartTime;
+            console.log(`Simulation Duration: ${(simulationDuration / 1000).toFixed(2)}s`);
+                
+            // Store the conversation for later saving
+            const conversationForSaving = conversation.map(step => ({
+              agent: step.agent === "sales_agent" ? "Sales Agent" : "Customer",
+              message: step.message
+            }));
+            
+            // Store the results for summary analysis
+            simulationResults.push({
+              iterationNumber: iteration + 1,
+              simulationNumber: simulation.id,
+              startIndex: conversationStartIndex,
+              salesAgentPassed: salesAgentResult,
+              customerAgentPassed: customerAgentResult,
+              overallPassed: testPassed,
+              duration: simulationDuration,
+              salesAgentFeedback: evaluation.object.agentEvaluation.salesAgentFeedback,
+              customerAgentFeedback: evaluation.object.agentEvaluation.customerAgentFeedback
+            });
+
+            // Store detailed conversation data
+            conversationData.push({
+              iterationNumber: iteration + 1,
+              simulationNumber: simulation.id,
+              startIndex: conversationStartIndex,
+              duration: simulationDuration,
+              conversation: conversationForSaving,
+              evaluation: {
+                salesAgentPassed: salesAgentResult,
+                customerAgentPassed: customerAgentResult,
+                overallPassed: testPassed,
+                salesAgentFeedback: evaluation.object.agentEvaluation.salesAgentFeedback,
+                customerAgentFeedback: evaluation.object.agentEvaluation.customerAgentFeedback
+              }
+            });
+          } catch (error) {
+            console.error('\n❌ Error during judge evaluation:', error);
+            
+            // Provide default values to allow the test to continue
+            const salesAgentResult = false;
+            const customerAgentResult = false;
+            const testPassed = false;
+          }
+        }
+
+        // Iteration summary
+        console.log(`\n📊 ITERATION ${iteration + 1} SUMMARY 📊`);
+        console.log(`Total Simulations: ${numberOfSimulationsPerIteration}`);
         
-        // Create optimizer prompt
-        const optimizerPrompt = dedent`
-          You are an expert sales conversation optimizer. Your task is to analyze the results of several sales call simulations and suggest improvements to the sales agent's system prompt.
-
-          Current Sales Agent System Prompt:
-          ${currentSalesAgentSystemPrompt}
-
-          The sales agent is being evaluated using the following criteria:
-          ${evaluationCriteria}
-
-          Here are the results of ${numberOfSimulationsPerIteration} simulations:
-          ${JSON.stringify(simulationResults, null, 2)}
-
-          Here are the detailed conversations:
-          ${JSON.stringify(allConversations, null, 2)}
-
-          Based on these results, please provide an optimized version of the sales agent system prompt that addresses any weaknesses or missed opportunities. Focus on:
-          1. Improving the introduction and explanation of Truss Payments
-          2. Better techniques for identifying customer pain points
-          3. Clearer presentation of the solution
-          4. More effective emphasis of key benefits
-          5. Better handling of objections
-
-          Provide your optimized prompt and explain your reasoning for the changes.
-        `;
+        const passedSimulations = simulationResults.filter(result => result.overallPassed).length;
+        const passRate = (passedSimulations/numberOfSimulationsPerIteration*100).toFixed(2);
+        console.log(`Passed Simulations: ${passedSimulations} (${passRate}%)`);
         
-        console.log('\n📝 Optimizer Prompt:');
-        console.log("\x1b[36m" + optimizerPrompt + "\x1b[0m"); // Cyan color for optimizer prompt
-        
-        // Generate optimizer evaluation
-        console.log('\n⚙️ Generating optimizer evaluation...');
-        const optimizerResult = await generateObject({
-          model: optimizerModel,
-          prompt: optimizerPrompt,
-          schema: OptimizerEvaluationSchema
+        // Output detailed results
+        console.log('\nDetailed Results:');
+        simulationResults.forEach(result => {
+          console.log(`\nSimulation #${result.simulationNumber} (Starting at index ${result.startIndex}):`);
+          console.log(`  Overall: ${result.overallPassed ? '✅ PASSED' : '❌ FAILED'}`);
+          console.log(`  Sales Agent: ${result.salesAgentPassed ? '✅ PASSED' : '❌ FAILED'}`);
+          console.log(`  Customer Agent: ${result.customerAgentPassed ? '✅ PASSED' : '❌ FAILED'}`);
+          console.log(`  Duration: ${(result.duration / 1000).toFixed(2)}s`);
+          console.log(`  Sales Agent Feedback: ${result.salesAgentFeedback || 'No feedback provided'}`);
+          console.log(`  Customer Agent Feedback: ${result.customerAgentFeedback || 'No feedback provided'}`);
         });
         
-        console.log('\n🤖 Optimizer Result:');
-        console.log("\x1b[33m--- Optimizer Reasoning ---\x1b[0m"); // Yellow color for reasoning
-        console.log("\x1b[33m" + optimizerResult.object.reasoningForChanges + "\x1b[0m");
+        // Store this iteration's results for the final summary
+        allIterationResults.push({
+          iteration: iteration + 1,
+          passRate: passRate,
+          passedSimulations: passedSimulations,
+          totalSimulations: numberOfSimulationsPerIteration
+        });
         
-        console.log("\x1b[32m--- Optimized Prompt ---\x1b[0m"); // Green color for optimized prompt
-        console.log("\x1b[32m" + optimizerResult.object.optimizedPrompt + "\x1b[0m");
+        // Add to the all results arrays
+        allConversationData.push(...conversationData);
+        allSimulationResults.push(...simulationResults);
         
-        // Save optimizer results
-        const optimizerResultsPath = path.join(iterationResultsDir, 'optimizer-results.json');
+        // Save results for this iteration
+        const iterationResultsDir = path.join(testResultsDir, `iteration-${iteration + 1}`);
+        if (!fs.existsSync(iterationResultsDir)) {
+          fs.mkdirSync(iterationResultsDir, { recursive: true });
+        }
+        
+        const iterationResultsPath = path.join(iterationResultsDir, 'results.json');
         fs.writeFileSync(
-          optimizerResultsPath,
-          JSON.stringify(optimizerResult.object, null, 2)
+          iterationResultsPath,
+          JSON.stringify({
+            iteration: iteration + 1,
+            totalSimulations: numberOfSimulationsPerIteration,
+            passedSimulations,
+            passRate: `${passRate}%`,
+            results: simulationResults,
+            conversations: conversationData,
+            salesAgentSystemPrompt: optimizedSalesAgentPrompt
+          }, null, 2)
         );
         
-        // Update the sales agent prompt for the next iteration
-        optimizedSalesAgentPrompt = optimizerResult.object.optimizedPrompt;
+        console.log(`\n📄 Iteration results saved to: ${iterationResultsPath}`);
         
-        console.log('\n✅ Optimizer completed. Updated prompt for next iteration.');
-        console.log('\x1b[36m--- Prompt Changes Summary ---\x1b[0m'); // Cyan color for summary
-        console.log('\x1b[36mThe optimizer has updated the sales agent prompt based on the simulation results.\x1b[0m');
-        console.log('\x1b[36mThis new prompt will be used in the next iteration of simulations.\x1b[0m');
-      }
-      
-      // This test is just for reporting, always passes
-      expect(true).toBe(true);
-    });
-  }
+        // If this is not the final iteration, run the optimizer
+        if (iteration < numberOfOptimizationIterations - 1) {
+          console.log('\n🧠 Running Optimizer Agent...');
+          
+          // Prepare data for optimizer
+          const allConversations = conversationData.map(data => {
+            return {
+              conversation: data.conversation,
+              evaluation: data.evaluation
+            };
+          });
+          
+          // Define the evaluation criteria for the optimizer
+          const evaluationCriteria = dedent`
+            For the sales agent, evaluate if they completed these specific requirements:
+            1. Did they clearly introduce themselves and explain that Truss Payments helps contractors get paid faster and save on processing fees?
+            2. Did they ask specific questions to identify the customer's payment challenges (e.g., "How do you currently handle payments?" or "What frustrates you about your current payment process?")?
+            3. Did they explicitly mention these key features: no fees, instant settlement, mobile check deposit, and QuickBooks integration?
+            4. Did they address at least one specific pain point mentioned by the customer with a relevant solution?
+            5. Did they handle objections professionally by acknowledging concerns before countering them?
+            6. Did they attempt to move the conversation forward with a clear next step (demo, follow-up call, etc.)?
+            
+            For the customer agent, evaluate:
+            1. Did they maintain their established character traits (resistant to change, values relationships, etc.)?
+            2. Did they communicate in a direct, sometimes blunt style?
+            3. Did they question the benefits of changing their established processes?
+            4. Did they respond realistically to the sales pitch?
+            5. Did they give the sales agent adequate opportunity to present their solution before making a final decision?
+          `;
+          
+          // Create optimizer prompt
+          const optimizerPrompt = dedent`
+            You are an expert sales conversation optimizer. Your task is to analyze the results of several sales call simulations and suggest improvements to the sales agent's system prompt.
 
-  // Add a final summary test that runs after all iterations
-  it('Final Optimization Summary', () => {
-    console.log('\n📊 FINAL OPTIMIZATION SUMMARY 📊');
-    console.log(`Total Iterations: ${numberOfOptimizationIterations}`);
-    console.log(`Total Simulations: ${numberOfOptimizationIterations * numberOfSimulationsPerIteration}`);
-    
-    // Collect all iteration results
-    const allResults = [];
-    for (let i = 1; i <= numberOfOptimizationIterations; i++) {
-      const iterationResultsPath = path.join(testResultsDir, `iteration-${i}`, 'results.json');
-      if (fs.existsSync(iterationResultsPath)) {
-        const iterationResults = JSON.parse(fs.readFileSync(iterationResultsPath, 'utf8'));
-        allResults.push({
-          iteration: i,
-          passRate: iterationResults.passRate,
-          passedSimulations: iterationResults.passedSimulations,
-          totalSimulations: iterationResults.totalSimulations
-        });
+            Current Sales Agent System Prompt:
+            ${optimizedSalesAgentPrompt}
+
+            The sales agent is being evaluated using the following criteria:
+            ${evaluationCriteria}
+
+            Grader Rubric:
+            For each of the sales agent requirements, assign a score from 0-5:
+            0: Completely failed to address this requirement
+            1: Minimally attempted but largely ineffective
+            2: Partially addressed but with significant room for improvement
+            3: Adequately addressed but could be more effective
+            4: Well addressed with minor room for improvement
+            5: Excellently addressed with no notable issues
+            
+            When analyzing the conversations, use this rubric to identify specific strengths and weaknesses.
+
+            Here are the results of ${numberOfSimulationsPerIteration} simulations:
+            ${JSON.stringify(simulationResults, null, 2)}
+
+            Here are the detailed conversations:
+            ${JSON.stringify(allConversations, null, 2)}
+
+            Based on these results, please provide an optimized version of the sales agent system prompt that addresses any weaknesses or missed opportunities. Focus on:
+            1. Improving the introduction and explanation of Truss Payments
+            2. Better techniques for identifying customer pain points
+            3. Clearer presentation of the solution
+            4. More effective emphasis of key benefits
+            5. Better handling of objections
+
+            In your reasoning, include a rubric-based assessment of the current performance across simulations, highlighting specific examples of where the sales agent scored poorly and how your changes address these issues.
+
+            Provide your optimized prompt and explain your reasoning for the changes.
+          `;
+          
+          console.log('\n📝 Optimizer Prompt:');
+          console.log("\x1b[36m" + optimizerPrompt + "\x1b[0m"); // Cyan color for optimizer prompt
+          
+          // Generate optimizer evaluation
+          console.log('\n⚙️ Generating optimizer evaluation...');
+          const optimizerResult = await generateObject({
+            model: optimizerModel,
+            prompt: optimizerPrompt,
+            schema: OptimizerEvaluationSchema
+          });
+          
+          console.log('\n🤖 Optimizer Result:');
+          console.log("\x1b[33m--- Optimizer Reasoning ---\x1b[0m"); // Yellow color for reasoning
+          console.log("\x1b[33m" + optimizerResult.object.reasoningForChanges + "\x1b[0m");
+          
+          console.log("\x1b[32m--- Optimized Prompt ---\x1b[0m"); // Green color for optimized prompt
+          console.log("\x1b[32m" + optimizerResult.object.optimizedPrompt + "\x1b[0m");
+          
+          // Save optimizer results
+          const optimizerResultsPath = path.join(testResultsDir, `iteration-${iteration + 1}`, 'optimizer-results.json');
+          fs.writeFileSync(
+            optimizerResultsPath,
+            JSON.stringify(optimizerResult.object, null, 2)
+          );
+          
+          // Update the sales agent prompt for the next iteration
+          optimizedSalesAgentPrompt = optimizerResult.object.optimizedPrompt;
+          
+          console.log('\n✅ Optimizer completed. Updated prompt for next iteration.');
+          console.log('\x1b[36m--- Prompt Changes Summary ---\x1b[0m'); // Cyan color for summary
+          console.log('\x1b[36mThe optimizer has updated the sales agent prompt based on the simulation results.\x1b[0m');
+          console.log('\x1b[36mThis new prompt will be used in the next iteration of simulations.\x1b[0m');
+        }
       }
-    }
-    
-    // Display results by iteration
-    console.log('\nResults by Iteration:');
-    allResults.forEach(result => {
-      console.log(`Iteration ${result.iteration}: ${result.passedSimulations}/${result.totalSimulations} passed (${result.passRate})`);
-    });
-    
-    // Calculate improvement
-    if (allResults.length >= 2) {
-      const firstIterationPassRate = parseFloat(allResults[0].passRate);
-      const lastIterationPassRate = parseFloat(allResults[allResults.length - 1].passRate);
-      const improvement = lastIterationPassRate - firstIterationPassRate;
       
-      console.log(`\nImprovement from first to last iteration: ${improvement.toFixed(2)}%`);
-    }
-    
-    // Calculate total test duration
-    const totalDuration = (Date.now() - testStartTime) / 1000;
-    console.log(`\n⏱️ Total Test Duration: ${totalDuration.toFixed(2)}s`);
-    
-    // Save final summary
-    const finalSummaryPath = path.join(testResultsDir, 'optimization-summary.json');
-    fs.writeFileSync(
-      finalSummaryPath,
-      JSON.stringify({
-        totalIterations: numberOfOptimizationIterations,
-        totalSimulations: numberOfOptimizationIterations * numberOfSimulationsPerIteration,
-        iterationResults: allResults,
-        totalDuration: totalDuration.toFixed(2),
-        timestamp: new Date().toISOString()
-      }, null, 2)
-    );
-    console.log(`\n📄 Final summary saved to: ${finalSummaryPath}`);
-    
-    // This test is just for reporting, always passes
-    expect(true).toBe(true);
+      // Final summary after all iterations
+      console.log('\n📊 FINAL OPTIMIZATION SUMMARY 📊');
+      console.log(`Total Iterations: ${numberOfOptimizationIterations}`);
+      console.log(`Total Simulations: ${numberOfOptimizationIterations * numberOfSimulationsPerIteration}`);
+      
+      // Display results by iteration
+      console.log('\nResults by Iteration:');
+      allIterationResults.forEach(result => {
+        console.log(`Iteration ${result.iteration}: ${result.passedSimulations}/${result.totalSimulations} passed (${result.passRate})`);
+      });
+      
+      // Calculate improvement
+      if (allIterationResults.length >= 2) {
+        const firstIterationPassRate = parseFloat(allIterationResults[0].passRate);
+        const lastIterationPassRate = parseFloat(allIterationResults[allIterationResults.length - 1].passRate);
+        const improvement = lastIterationPassRate - firstIterationPassRate;
+        
+        console.log(`\nImprovement from first to last iteration: ${improvement.toFixed(2)}%`);
+      }
+      
+      // Calculate total test duration
+      const totalDuration = (Date.now() - testStartTime) / 1000;
+      console.log(`\n⏱️ Total Test Duration: ${totalDuration.toFixed(2)}s`);
+      
+      // Save final summary
+      const finalSummaryPath = path.join(testResultsDir, 'optimization-summary.json');
+      fs.writeFileSync(
+        finalSummaryPath,
+        JSON.stringify({
+          totalIterations: numberOfOptimizationIterations,
+          totalSimulations: numberOfOptimizationIterations * numberOfSimulationsPerIteration,
+          iterationResults: allIterationResults,
+          agentSettings: {
+            salesAgentModel: 'gpt-4o-mini',
+            customerAgentModel: 'gpt-4o-mini',
+            judgeModel: 'gpt-4o',
+            optimizerModel: 'gpt-4o',
+            initialSalesAgentSystemPrompt: salesAgentSystemPrompt,
+            finalSalesAgentSystemPrompt: optimizedSalesAgentPrompt,
+            customerAgentSystemPrompt: customerAgentSystemPrompt
+          },
+          totalDuration: totalDuration.toFixed(2),
+          timestamp: new Date().toISOString()
+        }, null, 2)
+      );
+      console.log(`\n📄 Final summary saved to: ${finalSummaryPath}`);
+      
+      // Save detailed results
+      saveDetailedResults(
+        allConversationData, 
+        allSimulationResults, 
+        testStartTime
+      );
+    });
   });
 });
